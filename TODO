@@ -1,0 +1,293 @@
+BNG Category-based TODO (feature blocks)
+
+Conventions:
+    ☐ Tracking ID format: BNG-<CATEGORY>-NNNNN (5 digits, per-category sequence)
+    ☐ Each item lists: Summary, Scope (files/modules), Steps, Acceptance, Deps/Notes, Status
+    ☐ Categories in this document: MINING (PoW), CORE, BRANDING, LEDGER
+
+Categories are as follows:
+    ☐ MINING (PoW) - Changes to mining (cta_sha256), block templates, PoW rules for NG
+    ☐ CORE - Consensus, validation, mempool, P2P changes for NG
+    ☐ BRANDING - coin nickname, client nickname, address prefixes, magic bytes, ports, GUI assets
+    ☐ LEDGER - Changes to ledger structure, database interactions, state transitions
+
+---
+
+BRANDING (nickname, prefixes):
+
+    `BNG-BRANDING-00001-0` — Come up with the name of the fork of Bitcoin
+        ☐ Name: Bitcoin NG (Next Generation)
+
+    `BNG-BRANDING-00001-1` — Client nickname and user agent
+        ☐ Summary: Set project nickname and update UA string across binaries and logs.
+        ☐ Scope: src/clientversion.* , src/init/*.cpp, doc/README.md, doc/README-BTCCORE.md
+        ☐ Steps:
+            1) Define nickname (short + long form); update CLIENT_NAME/CLIENT_VERSION_STR.
+            2) Update about dialogs and --version outputs.
+        ☐ Acceptance:
+            ☐ UA string shows new nickname; docs/screens reflect branding.
+        ☐ Deps/Notes: Coordinate with GUI assets (BRANDING-00005).
+        ☐ Status: Not started
+
+    `BNG-BRANDING-00002` — Address prefixes and HRP
+        ☐ Summary: Define Base58 prefixes and bech32 HRP for mainnet/testnet/regtest/signet; update key/address IO.
+        ☐ Scope: src/chainparams*.{h,cpp}, src/key_io.cpp, doc/addresses.md
+        ☐ Steps:
+            1) Choose prefix bytes; update ChainParams and KeyIO mapping.
+            2) Update tests and docs; add migration notes.
+        ☐ Acceptance:
+            ☐ New addresses encode/decode correctly; legacy rejected unless allow-legacy flag set.
+        ☐ Deps/Notes: Impacts Ledger import (LEDGER-00001) and seeds (BRANDING-00004).
+        ☐ Status: Not started
+
+    `BNG-BRANDING-00003` — Magic bytes and default ports
+        ☐ Summary: If forking network, set new P2P magic and default ports.
+        ☐ Scope: src/chainparams.cpp, doc/files.md
+        ☐ Steps:
+            1) Assign unique message start bytes; update ports per net.
+            2) Update tests for handshake.
+        ☐ Acceptance:
+            ☐ Peers reject mismatched networks; tests pass.
+        ☐ Deps/Notes: Coordinate with seeds and version negotiation.
+        ☐ Status: Not started
+
+    `BNG-BRANDING-00004` — DNS seeds and fixed seeds
+        ☐ Summary: Update/replace DNS seed list and fixed seeds for new network.
+        ☐ Scope: src/chainparamsseeds.h, contrib/seeds/*, doc/seeds/README.md
+        ☐ Steps:
+            1) Generate/address seeds; update seed files.
+            2) Validate bootstrapping via testnet.
+        ☐ Acceptance:
+            ☐ Node discovers peers on fresh datadir; logs show new seeds used.
+        ☐ Deps/Notes: Needs ports/magic (BRANDING-00003).
+        ☐ Status: Not started
+
+    `BNG-BRANDING-00005` — GUI assets and product strings
+        ☐ Summary: Update icons, pixmaps, window titles, and about screens.
+        ☐ Scope: src/qt/*, share/pixmaps/*, src/qt/forms/*
+        ☐ Steps:
+            1) Replace app icons and splash; update strings.
+            2) Verify scaling and dark mode.
+        ☐ Acceptance:
+            ☐ New assets visible on all platforms; no layout regressions.
+        ☐ Deps/Notes: Align with nickname (BRANDING-00001).
+        ☐ Status: Not started
+
+    `BNG-BRANDING-00006` — Docs and manpages refresh
+        ☐ Summary: Update docs/manpages/examples for branding and address prefixes.
+        ☐ Scope: doc/*, doc/man/*, share/examples/*
+        ☐ Steps:
+            1) Update references, screenshots, and examples.
+            2) Add upgrade/compatibility notes.
+        ☐ Acceptance:
+            ☐ Docs build cleanly; internal links valid; examples match new prefixes.
+        ☐ Deps/Notes: After BRANDING-00001/00002.
+        ☐ Status: Not started
+
+
+MINING (PoW):
+
+    `BNG-MINING-00001` — NG PoW roles: key blocks vs microblocks
+        ☐ Summary: Introduce distinct roles for key blocks (consensus/leader election) and microblocks (transaction propagation) in consensus.
+        ☐ Scope: src/consensus/*, src/validation.cpp, src/pow.cpp, src/protocol.h, src/primitives/block*.{h,cpp}, src/chainparams*.{h,cpp}
+        ☐ Steps:
+            1) Add block type marker (key vs micro) to block header or encapsulating structure; ensure serialization/back-compat gates by versionbit/feature flag.
+            2) Adjust PoW check to apply only to key blocks; microblocks skip PoW but enforce leader tie to last key block.
+            3) Extend chainparams with NG feature activation height/flag for test networks.
+        ☐ Acceptance:
+            ☐ Node accepts key blocks with valid PoW; rejects microblocks with PoW (should not require).
+            ☐ Microblocks must reference a valid current key block leader (unit tests cover both cases).
+        ☐ Deps/Notes: Requires feature bit/version negotiation (see BNG-CORE-00005). Data layout change guarded by activation flag.
+        ☐ Status: Not started
+
+    `BNG-MINING-00002` — Mining templates for key blocks and microblocks
+        ☐ Summary: Extend getblocktemplate and miner to produce two template types with correct rules per block type.
+        ☐ Scope: src/miner.cpp, src/rpc/mining.cpp, src/policy/*, src/validation.cpp, doc/JSON-RPC-interface.md
+        ☐ Steps:
+            1) Add template selector ("type": "key"|"micro").
+            2) For micro templates, exclude coinbase, enforce leader-only; adjust fees/priority selection.
+            3) Update RPC help + examples; functional tests for both.
+        ☐ Acceptance:
+            ☐ getblocktemplate returns valid templates for both types; miners can submit both.
+            ☐ Functional tests cover submission/acceptance.
+        ☐ Deps/Notes: Depends on BNG-MINING-00001. UI/CLI docs in BNG-BRANDING-00006.
+        ☐ Status: Not started
+
+    `BNG-MINING-00003` — Difficulty and timing rules for NG
+        ☐ Summary: Apply difficulty retarget only to key blocks; define microblock timestamp spacing and limits.
+        ☐ Scope: src/pow.cpp, src/chainparams*.{h,cpp}, src/validation.cpp, doc/policy/*
+        ☐ Steps:
+            1) Implement difficulty calculation path keyed on block type.
+            2) Enforce microblock minimum/maximum spacing and timestamp drift rules.
+            3) Chainparams knobs for micro spacing and key target.
+        ☐ Acceptance:
+            ☐ Unit tests demonstrate correct retarget behavior and timestamp enforcement.
+        ☐ Deps/Notes: Parameter values TBD; start with testnet-only activation.
+        ☐ Status: Not started
+
+   `BNG-MINING-00004` — P2P messages for microblocks
+        ☐ Summary: Add wire support for microblocks (inv/getdata/headers variants or new message) with DoS protection.
+        ☐ Scope: src/net_processing.cpp, src/protocol.h, src/net.h, src/validationinterface.cpp, doc/p2p.md
+        ☐ Steps:
+            1) Define message(s) and feature bit; update inventory handling and relay policy.
+            2) Implement download/state tracking for microblock streams.
+            3) Rate-limit and orphan handling; tests for malformed microblocks.
+        ☐ Acceptance:
+            ☐ Nodes relay and request microblocks with NG-capable peers; legacy peers unaffected.
+        ☐ Deps/Notes: Requires BNG-CORE-00005 feature bit; tight coupling with validation.
+        ☐ Status: Not started
+
+    `BNG-MINING-00005` — Reorg and leader changes under NG
+        ☐ Summary: Implement reorg semantics when competing key blocks arrive; invalidate microblocks on losing branches.
+        ☐ Scope: src/validation.cpp, src/txmempool.cpp, src/consensus/params.h, src/index/* (if needed)
+        ☐ Steps:
+            1) On key-block reorg, roll back microblocks from old leader; re-admit transactions to mempool.
+            2) Ensure BIP68/sequence/locktime remain valid across microblock series.
+            3) Functional tests with contrived competing leaders.
+        ☐ Acceptance:
+            ☐ Deterministic chain tip and mempool state across reorg scenarios.
+        ☐ Deps/Notes: Depends on 00001-00004.
+        ☐ Status: Not started
+
+    `BNG-MINING-00006` — Tests: PoW and microblock flows
+        ☐ Summary: Add unit and functional tests for NG mining paths.
+        ☐ Scope: src/test/*, test/functional/* (new: mining_ng.py)
+        ☐ Steps:
+            1) Unit tests for block type rules and PoW checks.
+            2) Functional: mine key block then stream microblocks, submit, reorg.
+        ☐ Acceptance:
+            ☐ CI passes all new tests; coverage shows new paths exercised.
+        ☐ Deps/Notes: Blocks above must at least stub compile.
+        ☐ Status: Not started
+
+
+CORE
+
+    `BNG-CORE-00001` — Validation: accept/verify microblocks
+        ☐ Summary: Extend validation to accept microblocks between key blocks; adapt block connection rules.
+        ☐ Scope: src/validation.cpp, src/consensus/validation.h, src/primitives/block*.{h,cpp}
+        ☐ Steps:
+            1) Introduce connect path for microblocks (no coinbase; spends/fees rules unchanged).
+            2) Maintain per-leader sequence index and finalization at next key block.
+            3) Persist necessary metadata (in-memory first; db in follow-up if needed).
+        ☐ Acceptance:
+            ☐ Valid microblocks connect; invalid ones rejected with specific codes; legacy blocks unaffected.
+        ☐ Deps/Notes: Works with in-memory metadata first; storage moved to BNG-CORE-00003.
+        ☐ Status: Not started
+
+    `BNG-CORE-00002` — Mempool policy under NG
+        ☐ Summary: Update mempool/ancestor/CPFP policy to be stable under frequent microblocks.
+        ☐ Scope: src/txmempool.cpp, src/policy/*, doc/policy/*
+        ☐ Steps:
+            1) Review package limits and eviction tuned for microblock cadence.
+            2) Ensure fee estimator accounts for microblock throughput.
+        ☐ Acceptance:
+            ☐ Stable mempool size under load in functional benchmark; no policy regressions.
+        ☐ Deps/Notes: Depends on microblock cadence from BNG-MINING-00003.
+        ☐ Status: Not started
+
+    `BNG-CORE-00003` — Indexing metadata for microblocks
+        ☐ Summary: Extend index structures to reference microblock sequences per key block.
+        ☐ Scope: src/chain.h, src/chain.cpp, src/index/*, src/node/blockstorage.cpp
+        ☐ Steps:
+            1) Extend CBlockIndex or add side index for microblock linkage.
+            2) Optional: persist minimal metadata to disk behind activation flag.
+        ☐ Acceptance:
+            ☐ Lookups by (key block, sequence) O(1); optional disk persistence behind config.
+        ☐ Deps/Notes: Coordinate with reorg logic (BNG-MINING-00005).
+        ☐ Status: Not started
+
+    `BNG-CORE-00004` — RPC: NG status and templates
+        ☐ Summary: Add RPCs: getngstatus, getmicroblocktemplate; update existing calls with NG fields.
+        ☐ Scope: src/rpc/*.cpp, doc/JSON-RPC-interface.md
+        ☐ Steps:
+            1) getngstatus returns leader, last key block hash/height, micro seq.
+            2) getmicroblocktemplate mirrors getblocktemplate with micro specifics.
+        ☐ Acceptance:
+            ☐ New RPCs documented and tested in functional tests.
+        ☐ Deps/Notes: Depends on MINING-00002 and CORE-00001.
+        ☐ Status: Not started
+
+    `BNG-CORE-00005` — P2P feature negotiation (NG capability)
+        ☐ Summary: Add protocol version/feature bit gating NG behavior.
+        ☐ Scope: src/protocol.h, src/version.h, src/net_processing.cpp, doc/p2p.md
+        ☐ Steps:
+            1) Define service flag and/or version bit for NG.
+            2) Only exchange microblocks with peers advertising NG.
+        ☐ Acceptance:
+            ☐ Handshake logs show NG capability; legacy peers interop preserved.
+        ☐ Deps/Notes: Unblocks MINING-00004.
+        ☐ Status: Not started
+
+    `BNG-CORE-00006` — IBD and headers-first sync adjustments
+        ☐ Summary: Adapt sync to interleave/skip microblocks during initial block download.
+        ☐ Scope: src/net_processing.cpp, src/validation.cpp, doc/developer-notes.md
+        ☐ Steps:
+            1) During IBD, download key block headers; defer microblocks until caught up.
+            2) Post-IBD, request microblock streams.
+        ☐ Acceptance:
+            ☐ IBD time not regressed; microblocks populate after tip catches up in tests.
+        ☐ Deps/Notes: Depends on feature negotiation; complements indexing (CORE-00003).
+        ☐ Status: Not started
+
+LEDGER (hardware wallet import):
+
+    `BNG-LEDGER-00001` — HWI integration for custom HRP/prefix
+        ☐ Summary: Ensure external signer/HWI paths recognize BNG HRP/Base58 prefixes.
+        ☐ Scope: src/wallet/scriptpubkeyman.cpp, src/wallet/wallet.cpp, src/key_io.cpp, doc/external-signer.md, doc/wallets.md
+        ☐ Steps:
+            1) Allow network-parameterized descriptor creation with custom HRP.
+            2) Verify HWI import/export derivations (BIP84/86 variant) under new HRP.
+        ☐ Acceptance:
+            ☐ importdescriptors with xpub from Ledger yields correct BNG addresses.
+        ☐ Deps/Notes: Needs BRANDING-00002.
+        ☐ Status: Not started
+
+    `BNG-LEDGER-00002` — Import flows and RPC examples
+        ☐ Summary: Document and test descriptor-based import from Ledger for BNG.
+        ☐ Scope: doc/ledger-import.md (new), test/functional/wallet_ledger_import.py
+        ☐ Steps:
+            1) Add examples for p2wpkh/p2tr; derivation paths; gap limits.
+            2) Functional test simulating xpub import and address verification.
+        ☐ Acceptance:
+            ☐ Docs tested; functional test passes and validates first N addresses.
+        ☐ Deps/Notes: Builds on LEDGER-00001.
+        ☐ Status: Not started
+
+    `BNG-LEDGER-00003` — External signer UX (CLI/Qt)
+        ☐ Summary: Improve detection and prompts for external signer (Ledger) in CLI and Qt wallet.
+        ☐ Scope: src/wallet/external_signer.* , src/qt/*wallet* , doc/external-signer.md
+        ☐ Steps:
+            1) Enhance error messages for unsupported network/HRP.
+            2) Add Qt flow to attach signer and list accounts (read-only).
+        ☐ Acceptance:
+            ☐ User can attach signer and import xpub via UI and CLI; helpful errors on mismatch.
+        ☐ Deps/Notes: Optional for headless builds.
+        ☐ Status: Not started
+
+    `BNG-LEDGER-00004` — Signing path validation under BNG
+        ☐ Summary: Ensure PSBT signing via Ledger works for BNG addresses and scripts.
+        ☐ Scope: src/wallet/wallet.cpp, src/psbt.* , test/functional/wallet_signer.py
+        ☐ Steps:
+            1) Validate PSBT network fields align with BNG parameters.
+            2) Round-trip sign a PSBT with simulated device; broadcast on testnet.
+        ☐ Acceptance:
+            ☐ PSBT signed successfully; node accepts and mines transaction in tests.
+        ☐ Deps/Notes: Needs MINING baseline to broadcast; can stub mine in regtest.
+        ☐ Status: Not started
+
+    `BNG-LEDGER-00005` — Security and compatibility notes
+        ☐ Summary: Document risks, required Ledger app version, and unsupported paths.
+        ☐ Scope: doc/ledger-import.md, SECURITY.md
+        ☐ Steps:
+            1) Add section on HRP/prefix safety and lookalike risks.
+            2) Version matrix for HWI and Ledger app.
+        ☐ Acceptance:
+            ☐ Clear guidance in docs; reviewers sign off.
+        ☐ Deps/Notes: Coordinate with Docs refresh (BRANDING-00006).
+        ☐ Status: Not started
+
+
+Backlog / Future categories (for later extension)
+☐ WALLET, NETWORKING, TESTING/CI, DOCS, RELEASE/BUILD
+
