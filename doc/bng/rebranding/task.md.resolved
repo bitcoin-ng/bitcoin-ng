@@ -1,0 +1,20 @@
+# Rebranding Task List
+
+- [x] Plan Rebranding <!-- id: 0 -->
+    - [x] Obtain new chain name and ticker from user <!-- id: 1 -->
+    - [x] Finalize implementati
+    on plan <!-- id: 2 -->
+- [ ] Apply Rebranding <!-- id: 3 -->
+    - [x] Update Build Configuration ([configure.ac](bng/bitcoin-ng/configure.ac)) <!-- id: 4 -->
+    - [x] Update Client Version ([src/clientversion.cpp](bng/bitcoin-ng/src/clientversion.cpp)) <!-- id: 5 -->
+    - [x] Update GUI Strings and Units ([src/qt/bitcoinunits.cpp](bng/bitcoin-ng/src/qt/bitcoinunits.cpp), [src/qt/guiconstants.h](bng/bitcoin-ng/src/qt/guiconstants.h)) <!-- id: 6 -->
+    - [x] Update URI Schemes ([src/qt/guiutil.cpp](bng/bitcoin-ng/src/qt/guiutil.cpp)) <!-- id: 7 -->
+    - [x] Update Data Directories ([src/common/args.cpp](bng/bitcoin-ng/src/common/args.cpp)) <!-- id: 8 -->
+    - [x] Update Chain Parameters ([src/chainparams.cpp](bng/bitcoin-ng/src/chainparams.cpp)) <!-- id: 9 -->
+        - [x] Magic Bytes
+        - [x] Ports
+        - [x] Address Prefixes
+    - [x] Update Documentation ([README.md](bng/bitcoin-ng/README.md), etc.) <!-- id: 10 -->
+- [x] Verify Rebranding <!-- id: 11 -->
+    - [x] Build project <!-- id: 12 -->
+    - [x] Verify client name and paths <!-- id: 13 -->

@@ -1,0 +1,60 @@
+# Rebranding Implementation Plan
+
+## Goal
+Rename the Bitcoin-NG chain to a new name specified by the user. This involves updating build configurations, UI strings, data directories, and network parameters.
+
+## User Review Required
+> [!NOTE]
+> **Configuration Selected**:
+> - **Name**: BitcoinNG
+> - **Ticker**: BNG
+> - **HRP**: bng
+> - **Ports**: 12000 (Main), 13000 (Test), 14000 (Reg)
+> - **Magic**: Modified from BTC defaults
+
+## Proposed Changes
+
+### Build System
+#### [MODIFY] [configure.ac](file:///z:/home/yy/dev/bng/bitcoin-ng/configure.ac)
+- Update `AC_INIT` to `BitcoinNG`.
+- Update `PACKAGE_NAME` to `BitcoinNG`.
+
+### Client Identity
+#### [MODIFY] [src/clientversion.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/clientversion.cpp)
+- Update `CLIENT_NAME` to `BitcoinNG`.
+
+### GUI & Units
+#### [MODIFY] [src/qt/bitcoinunits.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/bitcoinunits.cpp)
+- Rename units (BTC -> BNG, mBTC -> mBNG, uBTC -> uBNG).
+
+#### [MODIFY] [src/qt/guiconstants.h](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/guiconstants.h)
+- Update `QAPP_ORG_NAME` to `BitcoinNG`.
+- Update `QAPP_APP_NAME` to `BitcoinNG-Qt`.
+
+#### [MODIFY] [src/qt/guiutil.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/guiutil.cpp)
+- Update URI schemes to `bng:`.
+
+### System Integration
+#### [MODIFY] [src/common/args.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/common/args.cpp)
+- Update default data directory to `BitcoinNG` (Windows/Mac) and `.bitcoin-ng` (Unix).
+
+### Network Parameters
+#### [MODIFY] [src/chainparams.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/chainparams.cpp)
+- **Magic Bytes**: Change slightly from BTC defaults to avoid collision.
+- **Default Ports**:
+    - Mainnet: 12000
+    - Testnet: 13000
+    - Regtest: 14000
+- **Address Prefixes**:
+    - Bech32 HRP: `bng` (Main), `tbng` (Test), `bngr` (Reg)
+    - Base58: Pick distinct values (e.g., 26 for 'B' if possible, or standard altcoin values).
+
+## Verification Plan
+### Automated Tests
+- Run `make check` to ensure no regressions.
+- Verify unit tests related to URI parsing and formatting.
+
+### Manual Verification
+- Build the application.
+- Launch the GUI and verify the window title, unit names, and "About" dialog.
+- Check the data directory creation on the filesystem.

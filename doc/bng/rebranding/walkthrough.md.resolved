@@ -1,0 +1,35 @@
+# Bitcoin-NG Rebranding Walkthrough
+
+I have successfully rebranded the codebase to **BitcoinNG** (Ticker: **BNG**).
+
+## Changes Applied
+
+### 1. Identity & Build
+- **Project Name**: Updated to `BitcoinNG` in [configure.ac](file:///z:/home/yy/dev/bng/bitcoin-ng/configure.ac).
+- **Client Name**: Updated to `BitcoinNG` in [src/clientversion.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/clientversion.cpp).
+- **GUI Branding**: Updated organization and app names in [src/qt/guiconstants.h](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/guiconstants.h).
+
+### 2. Network Parameters ([src/kernel/chainparams.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/kernel/chainparams.cpp))
+| Network | Magic Bytes | Port | P2PKH Prefix | Bech32 HRP |
+| :--- | :--- | :--- | :--- | :--- |
+| **Mainnet** | `0x42 0x4e 0x47 0x01` | `12000` | `26` ('B') | `bng` |
+| **Testnet** | `0x42 0x4e 0x47 0x02` | `13000` | `111` | `tbng` |
+| **Regtest** | `0x42 0x4e 0x47 0x03` | `14000` | `111` | `bngr` |
+
+### 3. User Interface
+- **Units**: Renamed BTC -> BNG, mBTC -> mBNG, uBTC -> uBNG in [src/qt/bitcoinunits.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/bitcoinunits.cpp).
+- **URI Scheme**: Updated to `bng:` in [src/qt/guiutil.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/qt/guiutil.cpp).
+- **Data Directory**: Defaults to `BitcoinNG` (Windows/Mac) or `.bitcoin-ng` (Linux) in [src/common/args.cpp](file:///z:/home/yy/dev/bng/bitcoin-ng/src/common/args.cpp).
+
+## Verification
+
+To verify the changes, you can build the project and check the following:
+
+1.  **Build**: Run `./autogen.sh && ./configure && make`.
+2.  **Version**: Run `./src/bitcoind --version` should show `BitcoinNG`.
+3.  **Data Dir**: Run [./src/bitcoind](file:///z:/home/yy/dev/bng/bitcoin-ng/src/bitcoind) and check that it creates `~/.bitcoin-ng` (or equivalent).
+4.  **GUI**: Run `./src/qt/bitcoin-qt` and check the splash screen, window title, and unit display.
+
+## Next Steps
+- Run a full build and test suite (`make check`).
+- Generate a new Genesis Block (as per [doc/bng/how-to-fork-a-bitcoin.md](file:///z:/home/yy/dev/bng/bitcoin-ng/doc/bng/how-to-fork-a-bitcoin.md)) if you intend to launch a separate network.

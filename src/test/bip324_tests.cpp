@@ -61,6 +61,28 @@ void TestBIP324PacketVector(
     cipher.Initialize(ellswift_theirs, in_initiating);
     BOOST_CHECK(cipher);
 
+    // Debug helper: print expected vs actual values if they don't match (helps debugging test failures).
+    auto SpanToHex = [](Span<const std::byte> s) {
+        const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data());
+        return HexStr(std::vector<unsigned char>(p, p + s.size()));
+    };
+    auto VecToHex = [](const std::vector<std::byte>& v) {
+        const unsigned char* p = reinterpret_cast<const unsigned char*>(v.data());
+        return HexStr(std::vector<unsigned char>(p, p + v.size()));
+    };
+    if (!(Span{out_session_id} == cipher.GetSessionID())) {
+        std::cout << "BIP324: session_id mismatch, expected=" << VecToHex(out_session_id)
+                  << " got=" << SpanToHex(cipher.GetSessionID()) << std::endl;
+    }
+    if (!(Span{mid_send_garbage} == cipher.GetSendGarbageTerminator())) {
+        std::cout << "BIP324: send_garbage_terminator mismatch, expected=" << VecToHex(mid_send_garbage)
+                  << " got=" << SpanToHex(cipher.GetSendGarbageTerminator()) << std::endl;
+    }
+    if (!(Span{mid_recv_garbage} == cipher.GetReceiveGarbageTerminator())) {
+        std::cout << "BIP324: recv_garbage_terminator mismatch, expected=" << VecToHex(mid_recv_garbage)
+                  << " got=" << SpanToHex(cipher.GetReceiveGarbageTerminator()) << std::endl;
+    }
+
     // Compare session variables.
     BOOST_CHECK(Span{out_session_id} == cipher.GetSessionID());
     BOOST_CHECK(Span{mid_send_garbage} == cipher.GetSendGarbageTerminator());
