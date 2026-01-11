@@ -6,6 +6,22 @@
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.descriptors import descsum_create
 from test_framework.util import assert_equal, assert_raises_rpc_error
+from test_framework.segwit_addr import decode_segwit_address, encode_segwit_address
+
+def _rebrand_bech32(addr: str) -> str:
+    """Map Bitcoin regtest bech32 'bcrt1...' to BNG regtest 'bngr1...' preserving payload.
+
+    Leaves non-bech32 addresses unchanged.
+    """
+    try:
+        hrp = addr.split('1')[0]
+        if hrp == 'bcrt':
+            ver, payload = decode_segwit_address(hrp, addr)
+            if ver is not None:
+                return encode_segwit_address('bngr', ver, payload)
+    except Exception:
+        pass
+    return addr
 
 class DeriveaddressesTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -15,19 +31,20 @@ class DeriveaddressesTest(BitcoinTestFramework):
         assert_raises_rpc_error(-5, "Missing checksum", self.nodes[0].deriveaddresses, "a")
 
         descriptor = "wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/0)#t6wfjs64"
-        address = "bcrt1qjqmxmkpmxt80xz4y3746zgt0q3u3ferr34acd5"
+        address = _rebrand_bech32("bcrt1qjqmxmkpmxt80xz4y3746zgt0q3u3ferr34acd5")
         assert_equal(self.nodes[0].deriveaddresses(descriptor), [address])
 
         descriptor = descriptor[:-9]
         assert_raises_rpc_error(-5, "Missing checksum", self.nodes[0].deriveaddresses, descriptor)
 
         descriptor_pubkey = "wpkh(tpubD6NzVbkrYhZ4WaWSyoBvQwbpLkojyoTZPRsgXELWz3Popb3qkjcJyJUGLnL4qHHoQvao8ESaAstxYSnhyswJ76uZPStJRJCTKvosUCJZL5B/1/1/0)#s9ga3alw"
-        address = "bcrt1qjqmxmkpmxt80xz4y3746zgt0q3u3ferr34acd5"
+        address = _rebrand_bech32("bcrt1qjqmxmkpmxt80xz4y3746zgt0q3u3ferr34acd5")
         assert_equal(self.nodes[0].deriveaddresses(descriptor_pubkey), [address])
 
         ranged_descriptor = "wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/*)#kft60nuy"
-        assert_equal(self.nodes[0].deriveaddresses(ranged_descriptor, [1, 2]), ["bcrt1qhku5rq7jz8ulufe2y6fkcpnlvpsta7rq4442dy", "bcrt1qpgptk2gvshyl0s9lqshsmx932l9ccsv265tvaq"])
-        assert_equal(self.nodes[0].deriveaddresses(ranged_descriptor, 2), [address, "bcrt1qhku5rq7jz8ulufe2y6fkcpnlvpsta7rq4442dy", "bcrt1qpgptk2gvshyl0s9lqshsmx932l9ccsv265tvaq"])
+        exp12 = [_rebrand_bech32("bcrt1qhku5rq7jz8ulufe2y6fkcpnlvpsta7rq4442dy"), _rebrand_bech32("bcrt1qpgptk2gvshyl0s9lqshsmx932l9ccsv265tvaq")]
+        assert_equal(self.nodes[0].deriveaddresses(ranged_descriptor, [1, 2]), exp12)
+        assert_equal(self.nodes[0].deriveaddresses(ranged_descriptor, 2), [address] + exp12)
 
         assert_raises_rpc_error(-8, "Range should not be specified for an un-ranged descriptor", self.nodes[0].deriveaddresses, descsum_create("wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/0)"), [0, 2])
 
@@ -52,7 +69,7 @@ class DeriveaddressesTest(BitcoinTestFramework):
         # positive value of a signed int32, and - currently - the
         # maximum value that the deriveaddresses bitcoin RPC call
         # accepts as derivation index.
-        assert_equal(self.nodes[0].deriveaddresses(descsum_create("wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/*)"), [2147483647, 2147483647]), ["bcrt1qtzs23vgzpreks5gtygwxf8tv5rldxvvsyfpdkg"])
+        assert_equal(self.nodes[0].deriveaddresses(descsum_create("wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1/1/*)"), [2147483647, 2147483647]), [_rebrand_bech32("bcrt1qtzs23vgzpreks5gtygwxf8tv5rldxvvsyfpdkg")])
 
         hardened_without_privkey_descriptor = descsum_create("wpkh(tpubD6NzVbkrYhZ4WaWSyoBvQwbpLkojyoTZPRsgXELWz3Popb3qkjcJyJUGLnL4qHHoQvao8ESaAstxYSnhyswJ76uZPStJRJCTKvosUCJZL5B/1'/1/0)")
         assert_raises_rpc_error(-5, "Cannot derive script without private keys", self.nodes[0].deriveaddresses, hardened_without_privkey_descriptor)

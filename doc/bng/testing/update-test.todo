@@ -1,0 +1,10 @@
+branding:
+    ☐ after branding we changed the magic bytes but this was not reflected in tests
+        BIP324 Fix
+
+        chainparams.cpp: the standard mainnet/testnet/regtest magic bytes (0xf9beb4d9, 0x0b110907, 0xfabfb5da) are now changed. BIP324 derives its HKDF salt from these bytes, so UDPATE tests to rely on new non-canonical (bng) values to fix the session IDs, garbage terminators, and ciphertext with the published packet vectors.
+
+    ☐ after branding we changed the default port but this was not reflected in tests
+        Fix default port in tests
+
+        chainparams.cpp: the standard mainnet/testnet/regtest default ports (8333, 18333, 18444) are now changed. UPDATE tests to rely on new non-canonical (bng) values to fix the default port in tests.

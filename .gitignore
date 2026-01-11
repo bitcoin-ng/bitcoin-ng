@@ -151,3 +151,4 @@ dist/
 /ci/scratch/
 
 *~
+.vscode/

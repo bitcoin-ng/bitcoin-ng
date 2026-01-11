@@ -11,10 +11,25 @@ from test_framework.util import (
     assert_raises_rpc_error,
 )
 
-BECH32_VALID = 'bcrt1qtmp74ayg7p24uslctssvjm06q5phz4yrxucgnv'
-BECH32_VALID_UNKNOWN_WITNESS = 'bcrt1p424qxxyd0r'
-BECH32_VALID_CAPITALS = 'BCRT1QPLMTZKC2XHARPPZDLNPAQL78RSHJ68U33RAH7R'
-BECH32_VALID_MULTISIG = 'bcrt1qdg3myrgvzw7ml9q0ejxhlkyxm7vl9r56yzkfgvzclrf4hkpx9yfqhpsuks'
+from test_framework.segwit_addr import decode_segwit_address, encode_segwit_address
+
+def _rebrand(addr: str) -> str:
+    try:
+        hrp = addr.split('1')[0]
+        is_upper = addr[:len(hrp)].isupper()
+        if hrp.lower() == 'bcrt':
+            ver, payload = decode_segwit_address(hrp.lower(), addr.lower())
+            if ver is not None:
+                new = encode_segwit_address('bngr', ver, payload)
+                return new.upper() if is_upper else new
+    except Exception:
+        pass
+    return addr
+
+BECH32_VALID = _rebrand('bcrt1qtmp74ayg7p24uslctssvjm06q5phz4yrxucgnv')
+BECH32_VALID_UNKNOWN_WITNESS = _rebrand('bcrt1p424qxxyd0r')
+BECH32_VALID_CAPITALS = _rebrand('BCRT1QPLMTZKC2XHARPPZDLNPAQL78RSHJ68U33RAH7R')
+BECH32_VALID_MULTISIG = _rebrand('bcrt1qdg3myrgvzw7ml9q0ejxhlkyxm7vl9r56yzkfgvzclrf4hkpx9yfqhpsuks')
 
 BECH32_INVALID_BECH32 = 'bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqdmchcc'
 BECH32_INVALID_BECH32M = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7k35mrzd'
