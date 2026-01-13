@@ -1,6 +1,6 @@
 # BNG-0001: Network Identity and Rebranding
 
-**Status**: Draft
+**Status**: completed
 **Created**: 2026-01-13
 
 ## Abstract
