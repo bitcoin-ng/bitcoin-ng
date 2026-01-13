@@ -144,6 +144,10 @@ BasicTestingSetup::BasicTestingSetup(const ChainType chainType, TestOpts opts)
     util::ThreadRename("test");
     gArgs.ClearPathCache();
     {
+        // Unit tests construct/destroy test fixtures repeatedly within a
+        // single process. Ensure the global args manager has a clean set of
+        // registered arguments before registering them again.
+        m_node.args->ClearArgs();
         SetupServerArgs(*m_node.args);
         SetupUnitTestArgs(*m_node.args);
         std::string error;
