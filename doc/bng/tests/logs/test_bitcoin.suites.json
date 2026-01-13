@@ -1,0 +1,640 @@
+{
+  "binary": "src/test/test_bitcoin",
+  "completed": 126,
+  "fail_count": 0,
+  "failed_suites": [],
+  "pass_count": 126,
+  "results": {
+    "addrman_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.addrman_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "allocator_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.allocator_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "amount_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.amount_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "argsman_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.argsman_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "arith_uint256_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.arith_uint256_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "banman_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.banman_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "base32_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.base32_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "base58_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.base58_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "base64_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.base64_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "bech32_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.bech32_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "bip324_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.bip324_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "bip32_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.bip32_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "blockchain_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.blockchain_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "blockencodings_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.blockencodings_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "blockfilter_index_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.blockfilter_index_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "blockfilter_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.blockfilter_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "blockmanager_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.blockmanager_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "bloom_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.bloom_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "bswap_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.bswap_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "checkqueue_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.checkqueue_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "cluster_linearize_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.cluster_linearize_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "coins_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.coins_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "coinscachepair_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.coinscachepair_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "coinselector_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.coinselector_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "coinstatsindex_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.coinstatsindex_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "common_url_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.common_url_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "compilerbug_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.compilerbug_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "compress_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.compress_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "crypto_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.crypto_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "cuckoocache_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.cuckoocache_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "dbwrapper_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.dbwrapper_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "denialofservice_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.denialofservice_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "descriptor_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.descriptor_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "disconnected_transactions": {
+      "log": "doc/bng/tests/logs/test_bitcoin.disconnected_transactions.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "feebumper_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.feebumper_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "feefrac_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.feefrac_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "flatfile_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.flatfile_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "fs_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.fs_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "getarg_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.getarg_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "group_outputs_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.group_outputs_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "hash_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.hash_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "headers_sync_chainwork_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.headers_sync_chainwork_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "httpserver_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.httpserver_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "i2p_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.i2p_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "init_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.init_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "interfaces_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.interfaces_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "ismine_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.ismine_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "key_io_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.key_io_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "key_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.key_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "logging_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.logging_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "mempool_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.mempool_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "merkle_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.merkle_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "merkleblock_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.merkleblock_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "miner_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.miner_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "miniminer_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.miniminer_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "miniscript_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.miniscript_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "minisketch_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.minisketch_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "multisig_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.multisig_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "net_peer_connection_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.net_peer_connection_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "net_peer_eviction_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.net_peer_eviction_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "net_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.net_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "netbase_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.netbase_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "node_warnings_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.node_warnings_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "orphanage_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.orphanage_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "peerman_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.peerman_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "pmt_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.pmt_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "policy_fee_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.policy_fee_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "policyestimator_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.policyestimator_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "pool_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.pool_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "pow_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.pow_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "prevector_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.prevector_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "psbt_wallet_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.psbt_wallet_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "raii_event_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.raii_event_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "random_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.random_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "rbf_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.rbf_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "rest_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.rest_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "result_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.result_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "reverselock_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.reverselock_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "rpc_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.rpc_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "sanity_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.sanity_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "scheduler_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.scheduler_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "script_p2sh_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.script_p2sh_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "script_parse_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.script_parse_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "script_segwit_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.script_segwit_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "script_standard_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.script_standard_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "script_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.script_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "scriptnum_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.scriptnum_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "scriptpubkeyman_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.scriptpubkeyman_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "serfloat_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.serfloat_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "serialize_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.serialize_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "settings_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.settings_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "sighash_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.sighash_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "sigopcount_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.sigopcount_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "skiplist_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.skiplist_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "sock_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.sock_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "span_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.span_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "spend_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.spend_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "streams_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.streams_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "sync_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.sync_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "system_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.system_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "timeoffsets_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.timeoffsets_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "torcontrol_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.torcontrol_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "transaction_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.transaction_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "translation_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.translation_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txindex_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txindex_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txpackage_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txpackage_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txreconciliation_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txreconciliation_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txrequest_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txrequest_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txvalidation_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txvalidation_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "txvalidationcache_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.txvalidationcache_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "uint256_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.uint256_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "util_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.util_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "util_threadnames_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.util_threadnames_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validation_block_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validation_block_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validation_chainstate_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validation_chainstate_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validation_chainstatemanager_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validation_chainstatemanager_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validation_flush_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validation_flush_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validation_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validation_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "validationinterface_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.validationinterface_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "versionbits_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.versionbits_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "wallet_crypto_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.wallet_crypto_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "wallet_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.wallet_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "wallet_transaction_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.wallet_transaction_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "wallet_util_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.wallet_util_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "walletdb_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.walletdb_tests.log",
+      "ok": true,
+      "returncode": 0
+    },
+    "walletload_tests": {
+      "log": "doc/bng/tests/logs/test_bitcoin.walletload_tests.log",
+      "ok": true,
+      "returncode": 0
+    }
+  },
+  "suite_count": 126
+}
