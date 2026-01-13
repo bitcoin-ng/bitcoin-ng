@@ -1,6 +1,6 @@
-# Test Fix TODO (make check)
+# Test Fix Summary (make check)
 
-This is a living checklist for everything invoked by `make check` in this repo, plus notes on what’s currently broken and why.
+This document tracks components invoked by `make check` and their status. As of 2026-01-13, all checks pass with no errors.
 
 ## How to run
 
@@ -15,12 +15,12 @@ This is a living checklist for everything invoked by `make check` in this repo, 
 - **Default port rebrand**: don’t assume `8333`; use `Params().GetDefaultPort()` in tests.
 - **Descriptor checksum changes**: `addr(...)#...` checksum changes when address string changes.
 
-## Status summary (known so far)
+## Status Summary
 
-- Unit tests: `src/test/test_bitcoin` suites ran individually and all passed (126/126).
-	- Report: `doc/bng/tests/logs/test_bitcoin.suites.json`
-	- Logs: `doc/bng/tests/logs/test_bitcoin.<suite>.log`
-- In progress: util golden tests (`test/util/test_runner.py`) still need expected outputs regenerated after address updates.
+- All C++ and wallet unit tests pass (126/126).
+    - Report: `doc/bng/tests/logs/test_bitcoin.suites.json`
+    - Logs: `doc/bng/tests/logs/test_bitcoin.<suite>.log`
+- Util golden tests (`test/util/test_runner.py`) pass after regenerating expected outputs.
 
 ## Test components invoked by `make check`
 
@@ -161,66 +161,30 @@ These are compiled from `src/test/*.cpp`.
 
 ### Util golden tests (test/util/test_runner.py)
 
-- [ ] `python3 test/util/test_runner.py` (drives `bitcoin-tx` and `bitcoin-util`, compares against files in `test/util/data/`)
-
-Known breakage pattern (pre-fix): expected files referenced `1...`/`bc1...` but fork outputs `B...`/`bng1...`, and descriptor checksums changed.
-
-Recent changes:
-
-- Updated arguments in `test/util/data/bitcoin-util-test.json` to use fork mainnet P2PKH addresses (version `0x1a`).
-- Next step: re-run util runner and regenerate expected outputs under `test/util/data/*.hex` and `test/util/data/*.json` for the affected cases.
+- [x] `python3 test/util/test_runner.py` (drives `bitcoin-tx` and `bitcoin-util`, compares against files in `test/util/data/`)
+    - Goldens regenerated with fork address/HRP updates via `python3 test/util/regenerate_golden_outputs.py`.
 
 ### Univalue tests
 
 - [x] univalue/test/object (`src/univalue/test/object`)
-- [ ] univalue/test/unitester (`src/univalue/test/unitester`) — currently fails opening fixtures; `JSON_TEST_SRC` appears to be `./univalue/test`.
+- [x] univalue/test/unitester (`src/univalue/test/unitester`) — FIXED by setting `JSON_TEST_SRC=./src/univalue/test` in the test environment.
 
 ### Minisketch tests
 
 - [x] minisketch/test (`src/minisketch/test`)
 
-## Current breakages (to fill as we go)
+## Current Breakages
 
-### util runner (bitcoin-tx) golden outputs
-
-- [ ] Regenerate expected outputs for transaction creation/signing cases once address args are updated.
-- [ ] Regenerate expected JSON outputs where `"address"`, `"desc"`, or bech32 HRP changes.
-
-Observed failures (2026-01-13):
-
-- [ ] `test/util/data/tt-delin1-out.json` (addr/desc in vout)
-- [ ] `test/util/data/tt-delout1-out.json` (addr/desc in vout)
-- [ ] `test/util/data/tt-locktime317000-out.json` (addr/desc in vout)
-- [ ] `test/util/data/txcreate1.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreatescript3.json` (P2WSH addr/desc, HRP `bc`→`bng`)
-- [ ] `test/util/data/txcreatesignv1.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreateoutpubkey2.json` (P2WPKH addr/desc, HRP `bc`→`bng`)
-- [ ] `test/util/data/txcreatedata1.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreatedata2.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreatedata_seq0.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreatedata_seq1.json` (P2PKH addr/desc)
-- [ ] `test/util/data/txcreatemultisig3.json` (P2WSH addr/desc, HRP `bc`→`bng`)
-
-What changed in returned output:
-
-- Base58 P2PKH addresses: `1...` → `B...`
-- Bech32 HRP: `bc1...` → `bng1...`
-- Descriptor checksums after `#` changed accordingly.
-
-Notes:
-
-- `.hex` golden files are sensitive to the destination scriptPubKey, which changes when the input address changes.
-- JSON goldens include both `address` and `desc` fields; descriptor checksums after `#` will change with the address.
+None. All `make check` components pass.
 
 
 ---
-## NOTES:
+## Notes
 
-✔ Ran the main unit-test binary suite-by-suite (126/126) using run_test_bitcoin_suites.py; report/logs are under logs. @done(26-01-13 15:21)
-✔ Updated the checklist in BIP-0001.todo: all test_bitcoin + wallet suites are now marked [x]. @done(26-01-13 15:21)
+✔ Ran the main unit-test binary suite-by-suite (126/126) using `run_test_bitcoin_suites.py`; report/logs are under logs. @done(26-01-13 15:21)
+✔ Regenerated util goldens and updated fork address/HRP expectations. @done(26-01-13 16:05)
+✔ Fixed Univalue `unitester` by pointing fixture path via `JSON_TEST_SRC`. @done(26-01-13 16:12)
 
-Ran the other make check-style executables individually:
-    ☐ object: PASS → marked [x]
-    ☐ test: PASS → marked [x]
-    ☐ unitester: FAIL (can’t open fixtures; JSON_TEST_SRC seems to be ./univalue/test) → left unchecked with a note
-    ☐ Util golden runner python3 test/util/test_runner.py is still failing (goldens need regeneration) and remains unchecked.
+---
+
+`make check` is green (2026-01-13)
