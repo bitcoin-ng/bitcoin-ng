@@ -71,8 +71,25 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  */
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
+    // NOTE: This helper is used by upstream networks (e.g. signet) that expect
+    // the original Bitcoin genesis coinbase content. Do not change it for BNG.
+    const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
+    const CScript genesisOutputScript = CScript() <<
+        "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex
+        << OP_CHECKSIG;
+    return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+}
+
+// BNG-specific genesis builder.
+// Kept separate on purpose so BNG can brand the coinbase timestamp/message while
+// leaving CreateGenesisBlock() intact for upstream networks/tests (e.g. signet/testnet4)
+// that may assume the original Bitcoin genesis coinbase content.
+static CBlock CreateBNGGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+{
     const char* pszTimestamp = "Yahoo Finance 23/Jan/2026 Bitcoin mining companies make major shift impacting AI and energy markets";
-    const CScript genesisOutputScript = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
+    const CScript genesisOutputScript = CScript() <<
+        "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex
+        << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 
@@ -140,10 +157,10 @@ public:
         // Time: 1769169600
         // Bits: 0x1f00ffff
         // Nonce: 50451
-        genesis = CreateGenesisBlock(1769169600, 50451, 0x1f00ffff, 1, 50 * COIN);
+        genesis = CreateBNGGenesisBlock(1769169600, 50451, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"00000870f94300d0669a34d3f4f318fad854db942aada28ecbe0126b1b55b753c"});
-        assert(genesis.hashMerkleRoot == uint256{"27caa87d0319d28cf7d06501fcd1aa90e7aec3a22572a5bbbebe6282f128baa1"});
+        assert(consensus.hashGenesisBlock == uint256{"cb10278e39a3f83a1cbe12a6fcd6c515e9693e076a945afd8f15fcac39ea4d53"});
+        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
@@ -236,30 +253,30 @@ public:
         // Time: 1769169660
         // Bits: 0x1f00ffff
         // Nonce: 2731
-        genesis = CreateGenesisBlock(1769169660, 2731, 0x1f00ffff, 1, 50 * COIN);
+        genesis = CreateBNGGenesisBlock(1769169660, 2731, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"00000be8f427ff4d85ac06618c7fd4d5ec5f179be950681661a2f40d50679634b"});
-        assert(genesis.hashMerkleRoot == uint256{"27caa87d0319d28cf7d06501fcd1aa90e7aec3a22572a5bbbebe6282f128baa1"});
+        assert(consensus.hashGenesisBlock == uint256{"3d62949ffc5368f6ebb16ae6524c40d5b479e9fa95c737a89d10421fc9840a18"});
+        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
 
         vFixedSeeds.clear();
         vSeeds.clear();
         vSeeds.emplace_back("seed.tbng.example.com."); // TODO: Add real seeds
 
-        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
-        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
-        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,239);
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};
-        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
+        // GIP-0001 testnet address space
+        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,100);
+        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,110);
+        base58Prefixes[SECRET_KEY] =     std::vector<unsigned char>(1,228);
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x12, 0x34};
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x43, 0x21};
 
-        bech32_hrp = "tb";
+        bech32_hrp = "tbng";
 
         vFixedSeeds.clear();
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
-        
-         = {
+        m_assumeutxo_data = {
             // Cleared
         };
 
@@ -570,10 +587,10 @@ public:
         // Time: 1769169600
         // Bits: 0x207fffff
         // Nonce: 1
-        genesis = CreateGenesisBlock(1769169600, 1, 0x207fffff, 1, 50 * COIN);
+        genesis = CreateBNGGenesisBlock(1769169600, 1, 0x207fffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"4ac8f3091b0bb1d8a29ae1ad9b261c2b5a25cb09fadbd64db566144e8340b94e"});
-        assert(genesis.hashMerkleRoot == uint256{"27caa87d0319d28cf7d06501fcd1aa90e7aec3a22572a5bbbebe6282f128baa1"});
+        assert(consensus.hashGenesisBlock == uint256{"365a78fd5d3a8c3363615cedc6b823936cf1d03136e476277a4890e07210dfba"});
+        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
 
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();

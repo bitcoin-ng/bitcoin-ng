@@ -83,7 +83,11 @@ struct TestArgsManager : public ArgsManager
 };
 
 //! Test GetSetting and GetArg type coercion, negation, and default value handling.
-class CheckValueTest : public TestChain100Setup
+//
+// Note: This test exercises ArgsManager parsing and does not require a
+// pre-mined regtest chain. Using the lightweight fixture avoids triggering
+// chainstate initialization.
+class CheckValueTest : public BasicTestingSetup
 {
 public:
     struct Expect {

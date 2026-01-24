@@ -64,9 +64,23 @@ Unique ports to avoid conflict with running Bitcoin nodes.
 ### 4. Genesis Block
 A new genesis block must be generated to ensure a distinct chain identity.
 
-- **Timestamp Message**: "Bitcoin-NG: A new era of scalability 2026-01-23"
-- **Genesis Hash**: [Pending Generation]
-- **Merkle Root**: [Pending Generation]
+- **Timestamp Message (coinbase)**: "Yahoo Finance 23/Jan/2026 Bitcoin mining companies make major shift impacting AI and energy markets"
+
+- **Mainnet**
+  - Genesis Hash: `cb10278e39a3f83a1cbe12a6fcd6c515e9693e076a945afd8f15fcac39ea4d53`
+  - Merkle Root: `5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45`
+
+- **Testnet**
+  - Genesis Hash: `3d62949ffc5368f6ebb16ae6524c40d5b479e9fa95c737a89d10421fc9840a18`
+  - Merkle Root: `5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45`
+
+- **Regtest**
+  - Genesis Hash: `365a78fd5d3a8c3363615cedc6b823936cf1d03136e476277a4890e07210dfba`
+  - Merkle Root: `5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45`
+
+See also:
+- `test/regtest-init-regression.md` for the unit-test bootstrap gotcha around future-dated genesis header timestamps.
+- Boost suite `bng_regtest_init_tests/*` for the black-box regtest init regression coverage.
 
 ---
 *Original discussion content from `doc/bng/discussion/magic_bytes.md` follows:*

@@ -614,6 +614,8 @@ if(BUILD_TESTS)
   enable_testing()
 endif()
 
+include(CTest)
+
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
   # have "make test" depend on "make all"
   set(CMAKE_SKIP_TEST_ALL_DEPENDENCY FALSE)

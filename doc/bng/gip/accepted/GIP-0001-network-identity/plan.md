@@ -9,6 +9,14 @@ This plan turns the accepted GIP into concrete repository changes. It is written
 3. **Operational safety**: avoid accidental shared datadirs/config files with Bitcoin Core.
 4. Keep the change set reviewable and testable.
 
+## Current status (as implemented)
+
+- `src/kernel/chainparams.cpp`:
+  - **BNG mainnet**: magic bytes, ports, seeds, address prefixes/HRP, new genesis, and Bitcoin-specific chain state defaults (assumevalid/assumeutxo/chaintxdata) have been updated/reset.
+  - **BNG testnet (v3)**: magic bytes, ports, seeds, and a BNG genesis are in place; Base58 prefixes and bech32 HRP are aligned to GIP-0001.
+  - **BNG regtest**: magic bytes, ports, and bech32 HRP are updated; regtest keeps its AssumeUTXO entries for unit/functional tests.
+- **Validation pending**: build and test suite execution for these changes has not been recorded in this plan yet.
+
 ## Non-goals (for this GIP)
 
 - Renaming binaries (`bitcoind`, `bitcoin-cli`, `bitcoin-qt`) or package names.

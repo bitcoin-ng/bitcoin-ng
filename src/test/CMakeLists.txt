@@ -82,6 +82,7 @@ add_executable(test_bitcoin
   rest_tests.cpp
   result_tests.cpp
   reverselock_tests.cpp
+  bng/regtest_init_tests.cpp
   rpc_tests.cpp
   sanity_tests.cpp
   scheduler_tests.cpp
@@ -219,5 +220,3 @@ function(add_all_test_targets)
 endfunction()
 
 add_all_test_targets()
-
-install_binary_component(test_bitcoin INTERNAL)
