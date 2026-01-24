@@ -11,7 +11,7 @@ Fix those tests one at a time until all pass:
 - [x] Test   #7: addrman_tests
 - [x] Test   #8: allocator_tests
 - [x] Test   #9: amount_tests
-- [ ] Test  #10: argsman_tests
+- [x] Test  #10: argsman_tests
 - [x] Test  #11: arith_uint256_tests
 - [x] Test  #12: banman_tests
 - [x] Test  #13: base32_tests
@@ -20,9 +20,9 @@ Fix those tests one at a time until all pass:
 - [x] Test  #16: bech32_tests
 - [ ] Test  #17: bip32_tests
 - [ ] Test  #18: bip324_tests
-- [ ] Test  #19: blockchain_tests
-- [ ] Test  #20: blockencodings_tests
-- [ ] Test  #21: blockfilter_index_tests
+- [x] Test  #19: blockchain_tests
+- [x] Test  #20: blockencodings_tests
+- [x] Test  #21: blockfilter_index_tests
 - [x] Test  #22: blockfilter_tests
 - [ ] Test  #23: blockmanager_tests
 - [ ] Test  #24: bloom_tests
@@ -35,7 +35,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #31: coins_tests_dbbase
 - [x] Test  #32: coins_tests
 - [x] Test  #33: coinscachepair_tests
-- [ ] Test  #34: coinstatsindex_tests
+- [x] Test  #34: coinstatsindex_tests
 - [x] Test  #35: common_url_tests
 - [x] Test  #36: compilerbug_tests
 - [x] Test  #37: compress_tests
@@ -44,16 +44,16 @@ Fix those tests one at a time until all pass:
 - [x] Test  #40: dbwrapper_tests
 - [ ] Test  #41: denialofservice_tests
 - [ ] Test  #42: descriptor_tests
-- [ ] Test  #43: disconnected_transactions
+- [x] Test  #43: disconnected_transactions
 - [x] Test  #44: feefrac_tests
 - [x] Test  #45: flatfile_tests
 - [x] Test  #46: fs_tests
 - [x] Test  #47: getarg_tests
 - [x] Test  #48: hash_tests
-- [ ] Test  #49: headers_sync_chainwork_tests
+- [x] Test  #49: headers_sync_chainwork_tests
 - [x] Test  #50: httpserver_tests
 - [x] Test  #51: i2p_tests
-- [ ] Test  #52: interfaces_tests
+- [x] Test  #52: interfaces_tests
 - [ ] Test  #53: key_io_tests
 - [ ] Test  #54: key_tests
 - [x] Test  #55: logging_tests
@@ -61,19 +61,19 @@ Fix those tests one at a time until all pass:
 - [ ] Test  #57: merkle_tests
 - [x] Test  #58: merkleblock_tests
 - [ ] Test  #59: miner_tests
-- [ ] Test  #60: miniminer_tests
+- [x] Test  #60: miniminer_tests
 - [x] Test  #61: miniscript_tests
 - [x] Test  #62: minisketch_tests
 - [x] Test  #63: multisig_tests
 - [ ] Test  #64: net_peer_connection_tests
 - [x] Test  #65: net_peer_eviction_tests
-- [ ] Test  #66: net_tests
+- [x] Test  #66: net_tests
 - [x] Test  #67: netbase_tests
-- [ ] Test  #68: node_init_tests
+- [x] Test  #68: node_init_tests
 - [x] Test  #69: node_warnings_tests
 - [ ] Test  #70: orphanage_tests
 - [x] Test  #71: pcp_tests
-- [ ] Test  #72: peerman_tests
+- [x] Test  #72: peerman_tests
 - [x] Test  #73: pmt_tests
 - [x] Test  #74: policy_fee_tests
 - [x] Test  #75: policyestimator_tests
@@ -113,20 +113,20 @@ Fix those tests one at a time until all pass:
 - [x] Test #109: torcontrol_tests
 - [x] Test #110: transaction_tests
 - [x] Test #111: translation_tests
-- [ ] Test #112: txdownload_tests
+- [x] Test #112: txdownload_tests
 - [x] Test #113: txgraph_tests
-- [ ] Test #114: txindex_tests
-- [ ] Test #115: txpackage_tests
+- [x] Test #114: txindex_tests
+- [x] Test #115: txpackage_tests
 - [x] Test #116: txreconciliation_tests
 - [x] Test #117: txrequest_tests
-- [ ] Test #118: txvalidation_tests
-- [ ] Test #119: txvalidationcache_tests
+- [x] Test #118: txvalidation_tests
+- [x] Test #119: txvalidationcache_tests
 - [x] Test #120: uint256_tests
 - [x] Test #121: util_string_tests
 - [ ] Test #122: util_tests
 - [x] Test #123: util_threadnames_tests
 - [x] Test #124: util_trace_tests
-- [ ] Test #125: validation_block_tests
+- [x] Test #125: validation_block_tests
 - [ ] Test #126: validation_chainstate_tests
 - [ ] Test #127: validation_chainstatemanager_tests
 - [ ] Test #128: validation_flush_tests
@@ -142,7 +142,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #138: ismine_tests
 - [ ] Test #139: psbt_wallet_tests
 - [x] Test #140: scriptpubkeyman_tests
-- [ ] Test #141: spend_tests
+- [x] Test #141: spend_tests
 - [x] Test #142: wallet_crypto_tests
 - [x] Test #143: wallet_rpc_tests
 - [ ] Test #144: wallet_tests
@@ -150,4 +150,4 @@ Fix those tests one at a time until all pass:
 - [x] Test #146: walletdb_tests
 - [ ] Test #147: walletload_tests
 - [x] Test #148: ipc_tests
-- [ ] Test #149: bng_regtest_init_tests (CTest wrapper for TestChain100Setup regtest bootstrap smoke)
+- [x] Test #149: bng_regtest_init_tests (CTest wrapper for TestChain100Setup regtest bootstrap smoke)

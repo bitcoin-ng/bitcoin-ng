@@ -86,11 +86,37 @@ static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits
 // that may assume the original Bitcoin genesis coinbase content.
 static CBlock CreateBNGGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "Yahoo Finance 23/Jan/2026 Bitcoin mining companies make major shift impacting AI and energy markets";
+    // BNG brands the genesis coinbase message, but must keep the coinbase scriptSig
+    // within the consensus bounds [2, 100] bytes (see CheckTransaction / bad-cb-length).
+    // For message lengths >= 76, script encoding uses OP_PUSHDATA1 (2 bytes overhead),
+    // so cap the message at 98 bytes.
+    constexpr char pszTimestamp[] =
+        "Yahoo Finance 23/Jan/2026 Bitcoin mining companies make major shift impacting AI and energy market";
+    static_assert(sizeof(pszTimestamp) - 1 <= 98);
+
     const CScript genesisOutputScript = CScript() <<
         "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex
         << OP_CHECKSIG;
-    return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+
+    CMutableTransaction txNew;
+    txNew.version = 1;
+    txNew.vin.resize(1);
+    txNew.vout.resize(1);
+    txNew.vin[0].scriptSig = CScript() << std::vector<unsigned char>(
+        reinterpret_cast<const unsigned char*>(pszTimestamp),
+        reinterpret_cast<const unsigned char*>(pszTimestamp) + (sizeof(pszTimestamp) - 1));
+    txNew.vout[0].nValue = genesisReward;
+    txNew.vout[0].scriptPubKey = genesisOutputScript;
+
+    CBlock genesis;
+    genesis.nTime    = nTime;
+    genesis.nBits    = nBits;
+    genesis.nNonce   = nNonce;
+    genesis.nVersion = nVersion;
+    genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
+    genesis.hashPrevBlock.SetNull();
+    genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
+    return genesis;
 }
 
 /**
@@ -156,11 +182,11 @@ public:
         // Genesis Block:
         // Time: 1769169600
         // Bits: 0x1f00ffff
-        // Nonce: 50451
-        genesis = CreateBNGGenesisBlock(1769169600, 50451, 0x1f00ffff, 1, 50 * COIN);
+        // Nonce: 67016
+        genesis = CreateBNGGenesisBlock(1769169600, 67016, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"cb10278e39a3f83a1cbe12a6fcd6c515e9693e076a945afd8f15fcac39ea4d53"});
-        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
+        assert(consensus.hashGenesisBlock == uint256{"000091d6a758a3d8187642ac0e1588805d39dee3250fde744cb3976518a3a903"});
+        assert(genesis.hashMerkleRoot == uint256{"d4780518dc248810a86ec85b81313256f41697b5a37929196e73aab2a164d592"});
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
@@ -252,11 +278,11 @@ public:
         // Genesis Block:
         // Time: 1769169660
         // Bits: 0x1f00ffff
-        // Nonce: 2731
-        genesis = CreateBNGGenesisBlock(1769169660, 2731, 0x1f00ffff, 1, 50 * COIN);
+        // Nonce: 105906
+        genesis = CreateBNGGenesisBlock(1769169660, 105906, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"3d62949ffc5368f6ebb16ae6524c40d5b479e9fa95c737a89d10421fc9840a18"});
-        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
+        assert(consensus.hashGenesisBlock == uint256{"000081d979673d56ecf41af9b30b249d39cb5c970835d89ff989b61d1b100c50"});
+        assert(genesis.hashMerkleRoot == uint256{"d4780518dc248810a86ec85b81313256f41697b5a37929196e73aab2a164d592"});
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -584,13 +610,15 @@ public:
         }
 
         // Genesis Block:
-        // Time: 1769169600
+        // Note: regtest is used in unit tests with a fixed mocktime (2020-08-31),
+        // so keep genesis nTime in the past to avoid "time-too-new" failures.
+        // Time: 1598880000
         // Bits: 0x207fffff
-        // Nonce: 1
-        genesis = CreateBNGGenesisBlock(1769169600, 1, 0x207fffff, 1, 50 * COIN);
+        // Nonce: 0
+        genesis = CreateBNGGenesisBlock(1598880000, 0, 0x207fffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256{"365a78fd5d3a8c3363615cedc6b823936cf1d03136e476277a4890e07210dfba"});
-        assert(genesis.hashMerkleRoot == uint256{"5ca903eec1c654c8925c416e2612bdf8893d8b4b911286f3d2af3f9137b72b45"});
+        assert(consensus.hashGenesisBlock == uint256{"1794abd3d98ee097c2916e79bed4adb69979de2bf2c3591395f622044cdb1c92"});
+        assert(genesis.hashMerkleRoot == uint256{"d4780518dc248810a86ec85b81313256f41697b5a37929196e73aab2a164d592"});
 
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();
