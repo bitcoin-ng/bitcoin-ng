@@ -1,0 +1,7 @@
+ 
+☐ Set nMinimumChainWork/defaultAssumeValid once BNG mainnet has a stable, widely-agreed high-ish height
+    - Choose a checkpoint block hash at a reasonably high height (after launch volatility has settled)
+    - Set consensus.nMinimumChainWork to the chainwork at/near that checkpoint to avoid low-work header/chain DoS
+    - Set consensus.defaultAssumeValid to that checkpoint block hash to speed up IBD (script checks can be skipped after it)
+    consensus.nMinimumChainWork = uint256{};
+    consensus.defaultAssumeValid = uint256{};
