@@ -3,6 +3,13 @@
 **Status**: accepted
 **Created**: 2026-01-17
 
+## Developer notes (shared)
+
+The project-wide workflow instructions across GIPs:
+
+- Build/test commands live in `doc/bng/development/README.md`.
+- Fork-specific test/vector guidance (e.g., BIP32 Base58 strings depend on BNG version bytes) lives in `doc/bng/development/hard-fork-notes.md`.
+
 ## Abstract
 This document outlines the proposal for the network identity of Bitcoin-NG (BNG), including magic bytes, address space (prefixes), and default ports to ensure network isolation and prevent replay attacks or confusion with Bitcoin Core.
 
