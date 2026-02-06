@@ -4,6 +4,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <base58.h>
 #include <clientversion.h>
 #include <key.h>
 #include <key_io.h>
@@ -11,6 +12,7 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -128,17 +130,43 @@ void RunTest(const TestVector& test)
     key.SetSeed(seed);
     pubkey = key.Neuter();
     for (const TestDerivation &derive : test.vDerive) {
-        unsigned char data[74];
-        key.Encode(data);
-        pubkey.Encode(data);
+        // The BIP32 test vectors use Bitcoin mainnet xpub/xprv version bytes.
+        // In BNG those version bytes are intentionally different (network identity),
+        // so don't compare the network-encoded Base58 strings. Instead, compare the
+        // underlying 74-byte BIP32 serialization (depth..keydata) after Base58Check
+        // decoding and stripping the 4-byte version.
+        auto decode_with_expected_version = [](const std::string& s, const std::array<unsigned char, 4>& expected_version) {
+            std::vector<unsigned char> decoded;
+            BOOST_REQUIRE_MESSAGE(DecodeBase58Check(s, decoded, 78), "Base58Check decode failed");
+            BOOST_REQUIRE_MESSAGE(decoded.size() == 78, "Unexpected decoded size");
+            BOOST_REQUIRE_MESSAGE(std::equal(expected_version.begin(), expected_version.end(), decoded.begin()), "Unexpected version bytes");
+            return decoded;
+        };
 
-        // Test private key
-        BOOST_CHECK(EncodeExtKey(key) == derive.prv);
-        BOOST_CHECK(DecodeExtKey(derive.prv) == key); //ensure a base58 decoded key also matches
+        constexpr std::array<unsigned char, 4> XPUB_VERSION{{0x04, 0x88, 0xB2, 0x1E}};
+        constexpr std::array<unsigned char, 4> XPRV_VERSION{{0x04, 0x88, 0xAD, 0xE4}};
 
-        // Test public key
-        BOOST_CHECK(EncodeExtPubKey(pubkey) == derive.pub);
-        BOOST_CHECK(DecodeExtPubKey(derive.pub) == pubkey); //ensure a base58 decoded pubkey also matches
+        // Private key: compare payload bytes.
+        {
+            const auto decoded = decode_with_expected_version(derive.prv, XPRV_VERSION);
+            unsigned char payload[BIP32_EXTKEY_SIZE];
+            key.Encode(payload);
+            BOOST_CHECK(std::memcmp(payload, decoded.data() + 4, BIP32_EXTKEY_SIZE) == 0);
+
+            // Still verify BNG's (network-dependent) Base58 roundtrip behavior.
+            BOOST_CHECK(DecodeExtKey(EncodeExtKey(key)) == key);
+        }
+
+        // Public key: compare payload bytes.
+        {
+            const auto decoded = decode_with_expected_version(derive.pub, XPUB_VERSION);
+            unsigned char payload[BIP32_EXTKEY_SIZE];
+            pubkey.Encode(payload);
+            BOOST_CHECK(std::memcmp(payload, decoded.data() + 4, BIP32_EXTKEY_SIZE) == 0);
+
+            // Still verify BNG's (network-dependent) Base58 roundtrip behavior.
+            BOOST_CHECK(DecodeExtPubKey(EncodeExtPubKey(pubkey)) == pubkey);
+        }
 
         // Derive new keys
         CExtKey keyNew;
@@ -185,8 +213,12 @@ BOOST_AUTO_TEST_CASE(bip32_test5) {
 }
 
 BOOST_AUTO_TEST_CASE(bip32_max_depth) {
-    CExtKey key_parent{DecodeExtKey(test1.vDerive[0].prv)}, key_child;
-    CExtPubKey pubkey_parent{DecodeExtPubKey(test1.vDerive[0].pub)}, pubkey_child;
+    // Avoid DecodeExtKey/DecodeExtPubKey here, as those are network-dependent.
+    // Generate the master keys directly from the seed.
+    std::vector<std::byte> seed{ParseHex<std::byte>(test1.strHexMaster)};
+    CExtKey key_parent, key_child;
+    key_parent.SetSeed(seed);
+    CExtPubKey pubkey_parent{key_parent.Neuter()}, pubkey_child;
 
     // We can derive up to the 255th depth..
     for (auto i = 0; i++ < 255;) {

@@ -18,7 +18,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #14: base58_tests
 - [x] Test  #15: base64_tests
 - [x] Test  #16: bech32_tests
-- [ ] Test  #17: bip32_tests
+- [x] Test  #17: bip32_tests
 - [ ] Test  #18: bip324_tests
 - [x] Test  #19: blockchain_tests
 - [x] Test  #20: blockencodings_tests
