@@ -54,8 +54,8 @@ Fix those tests one at a time until all pass:
 - [x] Test  #50: httpserver_tests
 - [x] Test  #51: i2p_tests
 - [x] Test  #52: interfaces_tests
-- [ ] Test  #53: key_io_tests
-- [ ] Test  #54: key_tests
+- [x] Test  #53: key_io_tests
+- [x] Test  #54: key_tests
 - [x] Test  #55: logging_tests
 - [ ] Test  #56: mempool_tests
 - [ ] Test  #57: merkle_tests
