@@ -28,8 +28,8 @@ Fix those tests one at a time until all pass:
 - [x] Test  #24: bloom_tests
 - [x] Test  #25: bswap_tests
 - [x] Test  #26: caches_tests
-- [ ] Test  #27: chainstate_write_tests
-- [ ] Test  #28: checkqueue_tests
+- [x] Test  #27: chainstate_write_tests
+- [x] Test  #28: checkqueue_tests
 - [x] Test  #29: cluster_linearize_tests
 - [x] Test  #30: coins_tests_base
 - [x] Test  #31: coins_tests_dbbase

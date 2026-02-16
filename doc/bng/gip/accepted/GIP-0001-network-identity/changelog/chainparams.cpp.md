@@ -31,6 +31,7 @@ This document summarizes the key changes made in `src/kernel/chainparams.cpp` as
 
 - **Genesis blocks and assertions**
 	- New genesis settings for each network (timestamp string, time/bits/nonce).
+	- Adjusted `consensus.powLimit` to remain compatible with the configured genesis `nBits` (so genesis PoW validation succeeds during chain activation).
 	- Updated asserts for `hashGenesisBlock` and `hashMerkleRoot` to match the new genesis blocks.
 	- Purpose: new chain identity implies new genesis blocks; the asserts protect against accidental drift.
 
