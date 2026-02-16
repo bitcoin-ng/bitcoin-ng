@@ -4,6 +4,7 @@
 
 #include <bip324.h>
 #include <chainparams.h>
+#include <kernel/messagestartchars.h>
 #include <key.h>
 #include <pubkey.h>
 #include <span.h>
@@ -15,11 +16,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
 
 namespace {
+
+constexpr MessageStartChars BITCOIN_MAINNET_MESSAGE_START{{0xF9, 0xBE, 0xB4, 0xD9}};
 
 struct BIP324Test : BasicTestingSetup {
 void TestBIP324PacketVector(
@@ -60,13 +64,24 @@ void TestBIP324PacketVector(
     BIP324Cipher cipher(key, ellswift_ours);
     BOOST_CHECK(!cipher);
     BOOST_CHECK(cipher.GetOurPubKey() == ellswift_ours);
-    cipher.Initialize(ellswift_theirs, in_initiating);
+    cipher.Initialize(ellswift_theirs, in_initiating, /*self_decrypt=*/false, BITCOIN_MAINNET_MESSAGE_START);
     BOOST_CHECK(cipher);
 
     // Compare session variables.
-    BOOST_CHECK(std::ranges::equal(out_session_id, cipher.GetSessionID()));
-    BOOST_CHECK(std::ranges::equal(mid_send_garbage, cipher.GetSendGarbageTerminator()));
-    BOOST_CHECK(std::ranges::equal(mid_recv_garbage, cipher.GetReceiveGarbageTerminator()));
+    const bool session_id_ok = std::ranges::equal(out_session_id, cipher.GetSessionID());
+    const bool send_garbage_ok = std::ranges::equal(mid_send_garbage, cipher.GetSendGarbageTerminator());
+    const bool recv_garbage_ok = std::ranges::equal(mid_recv_garbage, cipher.GetReceiveGarbageTerminator());
+    if (!session_id_ok || !send_garbage_ok || !recv_garbage_ok) {
+        BOOST_TEST_INFO("BIP324 vector mismatch in_idx=" + std::to_string(in_idx) +
+                        " initiating=" + std::string(in_initiating ? "true" : "false"));
+        BOOST_TEST_INFO("message_start_override=" + HexStr(BITCOIN_MAINNET_MESSAGE_START));
+        BOOST_TEST_INFO("computed_session_id=" + HexStr(MakeUCharSpan(cipher.GetSessionID())));
+        BOOST_TEST_INFO("computed_send_garbage_terminator=" + HexStr(MakeUCharSpan(cipher.GetSendGarbageTerminator())));
+        BOOST_TEST_INFO("computed_recv_garbage_terminator=" + HexStr(MakeUCharSpan(cipher.GetReceiveGarbageTerminator())));
+    }
+    BOOST_CHECK(session_id_ok);
+    BOOST_CHECK(send_garbage_ok);
+    BOOST_CHECK(recv_garbage_ok);
 
     // Vector of encrypted empty messages, encrypted in order to seek to the right position.
     std::vector<std::vector<std::byte>> dummies(in_idx);
@@ -87,12 +102,27 @@ void TestBIP324PacketVector(
 
     // Verify ciphertext. Note that the test vectors specify either out_ciphertext (for short
     // messages) or out_ciphertext_endswith (for long messages), so only check the relevant one.
+    bool ciphertext_ok{true};
+    bool endswith_ok{true};
     if (!out_ciphertext.empty()) {
-        BOOST_CHECK(out_ciphertext == ciphertext);
+        ciphertext_ok = (out_ciphertext == ciphertext);
+        if (!ciphertext_ok) {
+            BOOST_TEST_INFO("computed_ciphertext=" + HexStr(MakeUCharSpan(ciphertext)));
+        }
+        BOOST_CHECK(ciphertext_ok);
     } else {
         BOOST_CHECK(ciphertext.size() >= out_ciphertext_endswith.size());
-        BOOST_CHECK(std::ranges::equal(out_ciphertext_endswith, std::span{ciphertext}.last(out_ciphertext_endswith.size())));
+        const auto computed_endswith = std::span{ciphertext}.last(out_ciphertext_endswith.size());
+        endswith_ok = std::ranges::equal(out_ciphertext_endswith, computed_endswith);
+        if (!endswith_ok) {
+            BOOST_TEST_INFO("computed_ciphertext_endswith=" + HexStr(MakeUCharSpan(computed_endswith)));
+        }
+        BOOST_CHECK(endswith_ok);
     }
+
+    // If the expected vectors do not match, do not proceed with the error-injection checks.
+    // Those would otherwise create a very large number of redundant failures.
+    if (!session_id_ok || !send_garbage_ok || !recv_garbage_ok || !ciphertext_ok || !endswith_ok) return;
 
     for (unsigned error = 0; error <= 12; ++error) {
         // error selects a type of error introduced:
@@ -107,7 +137,7 @@ void TestBIP324PacketVector(
         BIP324Cipher dec_cipher(key, ellswift_ours);
         BOOST_CHECK(!dec_cipher);
         BOOST_CHECK(dec_cipher.GetOurPubKey() == ellswift_ours);
-        dec_cipher.Initialize(ellswift_theirs, (error == 1) ^ in_initiating, /*self_decrypt=*/true);
+        dec_cipher.Initialize(ellswift_theirs, (error == 1) ^ in_initiating, /*self_decrypt=*/true, BITCOIN_MAINNET_MESSAGE_START);
         BOOST_CHECK(dec_cipher);
 
         // Compare session variables.
@@ -165,7 +195,9 @@ BOOST_FIXTURE_TEST_SUITE(bip324_tests, BIP324Test)
 
 BOOST_AUTO_TEST_CASE(packet_test_vectors) {
     // BIP324 key derivation uses network magic in the HKDF process. We use mainnet params here
-    // as that is what the test vectors are written for.
+    // as that is what the test vectors are written for. On BNG, mainnet message start bytes are
+    // intentionally different, so we pass Bitcoin mainnet magic explicitly when initializing the
+    // cipher to keep the published vectors meaningful.
     SelectParams(ChainType::MAIN);
 
     // The test vectors are converted using the following Python code in the BIP bip-0324/ directory:

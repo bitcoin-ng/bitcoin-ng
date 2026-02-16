@@ -84,6 +84,7 @@ add_executable(test_bitcoin
   reverselock_tests.cpp
   bng/regtest_init_tests.cpp
   bng/bip32_identity_tests.cpp
+  bng/bip324_identity_tests.cpp
   rpc_tests.cpp
   sanity_tests.cpp
   scheduler_tests.cpp
