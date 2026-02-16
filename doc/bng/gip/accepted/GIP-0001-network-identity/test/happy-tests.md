@@ -24,7 +24,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #20: blockencodings_tests
 - [x] Test  #21: blockfilter_index_tests
 - [x] Test  #22: blockfilter_tests
-- [ ] Test  #23: blockmanager_tests
+- [x] Test  #23: blockmanager_tests
 - [ ] Test  #24: bloom_tests
 - [x] Test  #25: bswap_tests
 - [x] Test  #26: caches_tests
