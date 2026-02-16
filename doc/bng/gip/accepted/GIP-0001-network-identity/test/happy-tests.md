@@ -25,7 +25,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #21: blockfilter_index_tests
 - [x] Test  #22: blockfilter_tests
 - [x] Test  #23: blockmanager_tests
-- [ ] Test  #24: bloom_tests
+- [x] Test  #24: bloom_tests
 - [x] Test  #25: bswap_tests
 - [x] Test  #26: caches_tests
 - [ ] Test  #27: chainstate_write_tests

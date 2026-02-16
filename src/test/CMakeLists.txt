@@ -85,6 +85,8 @@ add_executable(test_bitcoin
   bng/regtest_init_tests.cpp
   bng/bip32_identity_tests.cpp
   bng/bip324_identity_tests.cpp
+  bng/network_identity_values_tests.cpp
+  bng/bloom_tests.cpp
   rpc_tests.cpp
   sanity_tests.cpp
   scheduler_tests.cpp
