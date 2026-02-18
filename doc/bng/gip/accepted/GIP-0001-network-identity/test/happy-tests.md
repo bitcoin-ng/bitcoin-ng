@@ -57,8 +57,8 @@ Fix those tests one at a time until all pass:
 - [x] Test  #53: key_io_tests
 - [x] Test  #54: key_tests
 - [x] Test  #55: logging_tests
-- [ ] Test  #56: mempool_tests
-- [ ] Test  #57: merkle_tests
+- [x] Test  #56: mempool_tests
+- [x] Test  #57: merkle_tests
 - [x] Test  #58: merkleblock_tests
 - [ ] Test  #59: miner_tests
 - [x] Test  #60: miniminer_tests
@@ -71,7 +71,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #67: netbase_tests
 - [x] Test  #68: node_init_tests
 - [x] Test  #69: node_warnings_tests
-- [ ] Test  #70: orphanage_tests
+- [x] Test  #70: orphanage_tests
 - [x] Test  #71: pcp_tests
 - [x] Test  #72: peerman_tests
 - [x] Test  #73: pmt_tests
@@ -79,10 +79,10 @@ Fix those tests one at a time until all pass:
 - [x] Test  #75: policyestimator_tests
 - [x] Test  #76: pool_tests
 - [ ] Test  #77: pow_tests
-- [ ] Test  #78: prevector_tests
+- [x] Test  #78: prevector_tests
 - [x] Test  #79: raii_event_tests
 - [x] Test  #80: random_tests
-- [ ] Test  #81: rbf_tests
+- [x] Test  #81: rbf_tests
 - [x] Test  #82: rest_tests
 - [x] Test  #83: result_tests
 - [x] Test  #84: reverselock_tests
@@ -129,15 +129,15 @@ Fix those tests one at a time until all pass:
 - [x] Test #125: validation_block_tests
 - [ ] Test #126: validation_chainstate_tests
 - [ ] Test #127: validation_chainstatemanager_tests
-- [ ] Test #128: validation_flush_tests
-- [ ] Test #129: validation_tests
+- [x] Test #128: validation_flush_tests
+- [x] Test #129: validation_tests
 - [x] Test #130: validationinterface_tests
 - [x] Test #131: versionbits_tests
 - [x] Test #132: db_tests
 - [ ] Test #133: coinselector_tests
-- [ ] Test #134: coinselection_tests
-- [ ] Test #135: feebumper_tests
-- [ ] Test #136: group_outputs_tests
+- [x] Test #134: coinselection_tests
+- [x] Test #135: feebumper_tests
+- [x] Test #136: group_outputs_tests
 - [x] Test #137: init_tests
 - [x] Test #138: ismine_tests
 - [ ] Test #139: psbt_wallet_tests
@@ -145,8 +145,8 @@ Fix those tests one at a time until all pass:
 - [x] Test #141: spend_tests
 - [x] Test #142: wallet_crypto_tests
 - [x] Test #143: wallet_rpc_tests
-- [ ] Test #144: wallet_tests
-- [ ] Test #145: wallet_transaction_tests
+- [x] Test #144: wallet_tests
+- [x] Test #145: wallet_transaction_tests
 - [x] Test #146: walletdb_tests
 - [ ] Test #147: walletload_tests
 - [x] Test #148: ipc_tests
