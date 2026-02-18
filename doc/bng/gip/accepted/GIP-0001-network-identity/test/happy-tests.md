@@ -86,7 +86,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #82: rest_tests
 - [x] Test  #83: result_tests
 - [x] Test  #84: reverselock_tests
-- [ ] Test  #85: rpc_tests
+- [x] Test  #85: rpc_tests
 - [x] Test  #86: sanity_tests
 - [x] Test  #87: scheduler_tests
 - [ ] Test  #88: script_assets_tests
@@ -134,7 +134,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #130: validationinterface_tests
 - [x] Test #131: versionbits_tests
 - [x] Test #132: db_tests
-- [ ] Test #133: coinselector_tests
+- [x] Test #133: coinselector_tests
 - [x] Test #134: coinselection_tests
 - [x] Test #135: feebumper_tests
 - [x] Test #136: group_outputs_tests

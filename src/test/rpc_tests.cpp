@@ -9,6 +9,7 @@
 #include <rpc/client.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
+#include <test/bng/reencode_helpers.h>
 #include <test/util/setup_common.h>
 #include <univalue.h>
 #include <util/time.h>
@@ -198,11 +199,16 @@ BOOST_AUTO_TEST_CASE(rpc_rawsign)
       "[{\"txid\":\"b4cc287e58f87cdae59417329f710f3ecd75a4ee1d2872b7248f50977c8493f3\","
       "\"vout\":1,\"scriptPubKey\":\"a914b10c9df5f7edf436c697f02f1efdba4cf399615187\","
       "\"redeemScript\":\"512103debedc17b3df2badbcdd86d5feb4562b86fe182e5998abd8bcd4f122c6155b1b21027e940bb73ab8732bfdf7f9216ecefca5b94d6df834e77e108f68e66f126044c052ae\"}]";
-    r = CallRPC(std::string("createrawtransaction ")+prevout+" "+
-      "{\"3HqAe9LtNBjnsfM4CyYaWTnvCaUYT7v4oZ\":11}");
+
+        // Upstream literals embed Bitcoin network identity (Base58 prefixes). Rewrite them
+        // for the active chainparams so the test remains meaningful under BNG.
+        const std::string out_addr = bng::test::ReencodeAddress("3HqAe9LtNBjnsfM4CyYaWTnvCaUYT7v4oZ").value_or("3HqAe9LtNBjnsfM4CyYaWTnvCaUYT7v4oZ");
+        const std::string outputs = std::string{"{\""} + out_addr + "\":11}";
+
+        r = CallRPC(std::string("createrawtransaction ") + prevout + " " + outputs);
     std::string notsigned = r.get_str();
-    std::string privkey1 = "\"KzsXybp9jX64P5ekX1KUxRQ79Jht9uzW7LorgwE65i5rWACL6LQe\"";
-    std::string privkey2 = "\"Kyhdf5LuKTRx4ge69ybABsiUAWjVRK4XGxAKk2FQLp2HjGMy87Z4\"";
+        std::string privkey1 = bng::test::ReencodeKeysInString("\"KzsXybp9jX64P5ekX1KUxRQ79Jht9uzW7LorgwE65i5rWACL6LQe\"");
+        std::string privkey2 = bng::test::ReencodeKeysInString("\"Kyhdf5LuKTRx4ge69ybABsiUAWjVRK4XGxAKk2FQLp2HjGMy87Z4\"");
     r = CallRPC(std::string("signrawtransactionwithkey ")+notsigned+" [] "+prevout);
     BOOST_CHECK(r.get_obj().find_value("complete").get_bool() == false);
     r = CallRPC(std::string("signrawtransactionwithkey ")+notsigned+" ["+privkey1+","+privkey2+"] "+prevout);
@@ -405,22 +411,25 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
 {
     UniValue result;
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a"}));
-    BOOST_CHECK_EQUAL(result[0].getInt<int>(), 101);
-    BOOST_CHECK_EQUAL(result[1].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
+    const std::string addr1 = bng::test::ReencodeAddress("mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a").value_or("mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
+    const std::string addr2 = bng::test::ReencodeAddress("mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU").value_or("mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU"}));
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", addr1}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 101);
-    BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
+    BOOST_CHECK_EQUAL(result[1].get_str(), addr1);
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a", "9"}));
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", addr2}));
+    BOOST_CHECK_EQUAL(result[0].getInt<int>(), 101);
+    BOOST_CHECK_EQUAL(result[1].get_str(), addr2);
+
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", addr1, "9"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
-    BOOST_CHECK_EQUAL(result[1].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
+    BOOST_CHECK_EQUAL(result[1].get_str(), addr1);
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU", "9"}));
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", addr2, "9"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
-    BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
+    BOOST_CHECK_EQUAL(result[1].get_str(), addr2);
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
 }
 
