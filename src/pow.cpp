@@ -11,6 +11,42 @@
 #include <uint256.h>
 #include <util/check.h>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
+#include <iterator>
+#include <vector>
+
+namespace {
+using boost::multiprecision::cpp_int;
+
+cpp_int CppIntFromUint256LE(const uint256& value)
+{
+    cpp_int out;
+    import_bits(out, value.begin(), value.end(), /*chunk_size=*/8, /*msb_first=*/false);
+    return out;
+}
+
+arith_uint256 ArithFromCppIntLE(const cpp_int& value)
+{
+    std::vector<unsigned char> bytes;
+    bytes.reserve(uint256::size());
+    export_bits(value, std::back_inserter(bytes), /*chunk_size=*/8, /*msb_first=*/false);
+    bytes.resize(uint256::size(), 0);
+
+    uint256 out;
+    std::copy(bytes.begin(), bytes.begin() + uint256::size(), out.begin());
+    return UintToArith256(out);
+}
+
+arith_uint256 MulDiv(const arith_uint256& value, uint32_t mul, uint32_t div)
+{
+    cpp_int wide = CppIntFromUint256LE(ArithToUint256(value));
+    wide *= mul;
+    wide /= div;
+    return ArithFromCppIntLE(wide);
+}
+} // namespace
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
@@ -75,8 +111,18 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
         bnNew.SetCompact(pindexLast->nBits);
     }
 
-    bnNew *= nActualTimespan;
-    bnNew /= params.nPowTargetTimespan;
+    // Retarget arithmetic is historically done in 256-bit and relies on the
+    // powLimit being low enough to avoid overflow. BNG can use a much larger
+    // powLimit (e.g. to allow a very easy genesis), so compute using wider
+    // arithmetic when needed.
+    const uint32_t actual_timespan{static_cast<uint32_t>(nActualTimespan)};
+    const uint32_t target_timespan{static_cast<uint32_t>(params.nPowTargetTimespan)};
+    if (bnNew.bits() > 224) {
+        bnNew = MulDiv(bnNew, actual_timespan, target_timespan);
+    } else {
+        bnNew *= actual_timespan;
+        bnNew /= target_timespan;
+    }
 
     if (bnNew > bnPowLimit)
         bnNew = bnPowLimit;
@@ -101,8 +147,12 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
         // Calculate the largest difficulty value possible:
         arith_uint256 largest_difficulty_target;
         largest_difficulty_target.SetCompact(old_nbits);
-        largest_difficulty_target *= largest_timespan;
-        largest_difficulty_target /= params.nPowTargetTimespan;
+        if (largest_difficulty_target.bits() > 224) {
+            largest_difficulty_target = MulDiv(largest_difficulty_target, static_cast<uint32_t>(largest_timespan), static_cast<uint32_t>(params.nPowTargetTimespan));
+        } else {
+            largest_difficulty_target *= static_cast<uint32_t>(largest_timespan);
+            largest_difficulty_target /= static_cast<uint32_t>(params.nPowTargetTimespan);
+        }
 
         if (largest_difficulty_target > pow_limit) {
             largest_difficulty_target = pow_limit;
@@ -117,8 +167,12 @@ bool PermittedDifficultyTransition(const Consensus::Params& params, int64_t heig
         // Calculate the smallest difficulty value possible:
         arith_uint256 smallest_difficulty_target;
         smallest_difficulty_target.SetCompact(old_nbits);
-        smallest_difficulty_target *= smallest_timespan;
-        smallest_difficulty_target /= params.nPowTargetTimespan;
+        if (smallest_difficulty_target.bits() > 224) {
+            smallest_difficulty_target = MulDiv(smallest_difficulty_target, static_cast<uint32_t>(smallest_timespan), static_cast<uint32_t>(params.nPowTargetTimespan));
+        } else {
+            smallest_difficulty_target *= static_cast<uint32_t>(smallest_timespan);
+            smallest_difficulty_target /= static_cast<uint32_t>(params.nPowTargetTimespan);
+        }
 
         if (smallest_difficulty_target > pow_limit) {
             smallest_difficulty_target = pow_limit;

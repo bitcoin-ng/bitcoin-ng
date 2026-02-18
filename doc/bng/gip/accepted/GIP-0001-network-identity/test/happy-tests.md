@@ -60,7 +60,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #56: mempool_tests
 - [x] Test  #57: merkle_tests
 - [x] Test  #58: merkleblock_tests
-- [ ] Test  #59: miner_tests
+- [x] Test  #59: miner_tests
 - [x] Test  #60: miniminer_tests
 - [x] Test  #61: miniscript_tests
 - [x] Test  #62: minisketch_tests
@@ -78,7 +78,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #74: policy_fee_tests
 - [x] Test  #75: policyestimator_tests
 - [x] Test  #76: pool_tests
-- [ ] Test  #77: pow_tests
+- [x] Test  #77: pow_tests
 - [x] Test  #78: prevector_tests
 - [x] Test  #79: raii_event_tests
 - [x] Test  #80: random_tests
