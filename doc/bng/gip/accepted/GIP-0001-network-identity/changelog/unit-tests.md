@@ -2,7 +2,7 @@
 
 This note records test-suite changes made to keep the upstream unit tests meaningful after BNG’s network identity changes (GIP-0001).
 
-**Date**: 2026-02-16
+**Date**: 2026-02-18
 
 ## Summary
 
@@ -10,6 +10,7 @@ This note records test-suite changes made to keep the upstream unit tests meanin
   - decoded payload/structures, and/or
   - encode/decode roundtrips under the active BNG chainparams.
 - Added dedicated BNG unit tests under `src/test/bng/` that pin BNG network identity constants and guard against accidental drift.
+- Kept descriptor unit tests “happy” on BNG by updating BNG-specific expectations (including `DescriptorID()` outputs) and enabling all split descriptor-test chunks.
 
 ## Changes
 
@@ -30,6 +31,10 @@ This note records test-suite changes made to keep the upstream unit tests meanin
     - BIP32 version bytes,
     - genesis `nBits` compatibility with `powLimit`.
 
+- **Descriptor tests**
+  - Updated expected `DescriptorID()` values where BNG diverges from upstream.
+  - Enabled all split descriptor-test chunks so `descriptor_tests` remains a reliable “happy path” signal.
+
 ## Files
 
 - `src/test/bloom_tests.cpp`
@@ -38,4 +43,5 @@ This note records test-suite changes made to keep the upstream unit tests meanin
 - `src/test/bng/network_identity_values_tests.cpp`
 - `src/test/bng/bloom_tests.cpp`
 - `src/test/CMakeLists.txt`
+- `src/test/descriptor_tests.cpp`
 - `doc/bng/gip/accepted/GIP-0001-network-identity/test/happy-tests.md`

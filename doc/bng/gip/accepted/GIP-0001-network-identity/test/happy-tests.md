@@ -42,8 +42,8 @@ Fix those tests one at a time until all pass:
 - [x] Test  #38: crypto_tests
 - [x] Test  #39: cuckoocache_tests
 - [x] Test  #40: dbwrapper_tests
-- [ ] Test  #41: denialofservice_tests
-- [ ] Test  #42: descriptor_tests
+- [x] Test  #41: denialofservice_tests
+- [x] Test  #42: descriptor_tests
 - [x] Test  #43: disconnected_transactions
 - [x] Test  #44: feefrac_tests
 - [x] Test  #45: flatfile_tests
