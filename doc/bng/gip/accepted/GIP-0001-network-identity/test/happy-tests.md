@@ -140,7 +140,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #136: group_outputs_tests
 - [x] Test #137: init_tests
 - [x] Test #138: ismine_tests
-- [ ] Test #139: psbt_wallet_tests
+- [x] Test #139: psbt_wallet_tests
 - [x] Test #140: scriptpubkeyman_tests
 - [x] Test #141: spend_tests
 - [x] Test #142: wallet_crypto_tests
@@ -148,6 +148,11 @@ Fix those tests one at a time until all pass:
 - [x] Test #144: wallet_tests
 - [x] Test #145: wallet_transaction_tests
 - [x] Test #146: walletdb_tests
-- [ ] Test #147: walletload_tests
+- [x] Test #147: walletload_tests
 - [x] Test #148: ipc_tests
 - [x] Test #149: bng_regtest_init_tests (CTest wrapper for TestChain100Setup regtest bootstrap smoke)
+- [ ] (CTest #86) bng_bip32_identity_tests
+- [ ] (CTest #87) bng_bip324_identity_tests
+- [ ] (CTest #88) bng_network_identity_values_tests
+- [ ] (CTest #89) bng_bloom_tests
+- [ ] (CTest #90) bng_reencode_helpers_tests

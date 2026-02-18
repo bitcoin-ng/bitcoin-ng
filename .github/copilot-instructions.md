@@ -34,3 +34,6 @@ These instructions are optimized for making correct, minimal changes in **BNG do
 ## Style and PR hygiene for docs
 - Keep Markdown minimal and scannable (short sections, bullets).
 - Some existing GIPs embed historical discussion blocks; avoid adding new large pasted discussions—prefer linking to a GIP/doc section or leaving context in git history.
+
+## Tests and bng extensions
+- When fixing tests, reuse/extend existing BNG test helpers (e.g. for key re-encoding) rather than adding new ones, to keep the test codebase maintainable.
