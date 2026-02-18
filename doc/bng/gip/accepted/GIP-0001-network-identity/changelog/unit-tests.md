@@ -35,6 +35,10 @@ This note records test-suite changes made to keep the upstream unit tests meanin
   - Updated expected `DescriptorID()` values where BNG diverges from upstream.
   - Enabled all split descriptor-test chunks so `descriptor_tests` remains a reliable “happy path” signal.
 
+- **Peer connection tests**
+  - `net_peer_connection_tests` previously hardcoded Bitcoin’s default port (`8333`) in debug-log expectations.
+  - Updated to use `Params().GetDefaultPort()` so the test remains correct under BNG’s chainparams (e.g. `9333` on main).
+
 ## Files
 
 - `src/test/bloom_tests.cpp`
@@ -44,4 +48,5 @@ This note records test-suite changes made to keep the upstream unit tests meanin
 - `src/test/bng/bloom_tests.cpp`
 - `src/test/CMakeLists.txt`
 - `src/test/descriptor_tests.cpp`
+- `src/test/net_peer_connection_tests.cpp`
 - `doc/bng/gip/accepted/GIP-0001-network-identity/test/happy-tests.md`

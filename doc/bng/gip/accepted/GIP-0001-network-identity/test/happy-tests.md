@@ -65,7 +65,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #61: miniscript_tests
 - [x] Test  #62: minisketch_tests
 - [x] Test  #63: multisig_tests
-- [ ] Test  #64: net_peer_connection_tests
+- [x] Test  #64: net_peer_connection_tests
 - [x] Test  #65: net_peer_eviction_tests
 - [x] Test  #66: net_tests
 - [x] Test  #67: netbase_tests
