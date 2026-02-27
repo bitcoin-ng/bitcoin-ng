@@ -89,7 +89,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #85: rpc_tests
 - [x] Test  #86: sanity_tests
 - [x] Test  #87: scheduler_tests
-- [ ] Test  #88: script_assets_tests
+- [x] Test  #88: script_assets_tests
 - [x] Test  #89: script_p2sh_tests
 - [x] Test  #90: script_parse_tests
 - [x] Test  #91: script_segwit_tests

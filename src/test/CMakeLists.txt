@@ -204,6 +204,14 @@ function(add_boost_test source_file)
     add_test(NAME ${test_suite_name}
       COMMAND test_bitcoin --run_test=${test_suite_name} --catch_system_error=no --log_level=test_suite -- DEBUG_LOG_OUT
     )
+
+    # Ensure script_assets_tests can find its json fixture and does not get skipped.
+    if(test_suite_name STREQUAL "script_assets_tests")
+      set_property(TEST ${test_suite_name} PROPERTY
+        ENVIRONMENT "DIR_UNIT_TEST_DATA=${CMAKE_CURRENT_SOURCE_DIR}/data"
+      )
+    endif()
+
     set_property(TEST ${test_suite_name} PROPERTY
       SKIP_REGULAR_EXPRESSION
         "no test cases matching filter"
