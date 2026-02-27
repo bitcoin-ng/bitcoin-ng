@@ -11,6 +11,7 @@
 #include <node/utxo_snapshot.h>
 #include <rpc/blockchain.h>
 #include <test/util/setup_common.h>
+#include <util/result.h>
 #include <util/fs.h>
 #include <validation.h>
 
@@ -128,6 +129,10 @@ CreateAndActivateUTXOSnapshot(
     }
 
     auto res = node.chainman->ActivateSnapshot(auto_infile, metadata, in_memory_chainstate);
+
+    if (!res) {
+        LogError("ActivateSnapshot failed: %s\n", util::ErrorString(res).original);
+    }
 
     // Restore the old tip.
     new_active.m_chain.SetTip(*tip);

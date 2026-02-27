@@ -127,7 +127,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #123: util_threadnames_tests
 - [x] Test #124: util_trace_tests
 - [x] Test #125: validation_block_tests
-- [ ] Test #126: validation_chainstate_tests
+- [x] Test #126: validation_chainstate_tests
 - [ ] Test #127: validation_chainstatemanager_tests
 - [x] Test #128: validation_flush_tests
 - [x] Test #129: validation_tests

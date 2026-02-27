@@ -41,6 +41,7 @@ This document summarizes the key changes made in `src/kernel/chainparams.cpp` as
 
 - **AssumeUTXO table (`m_assumeutxo_data`)**
 	- For BNG main/testnet, `m_assumeutxo_data` is intentionally **empty**.
+	- **2026-02-27**: updated the **regtest** height-110 AssumeUTXO `blockhash` entry to match BNG’s regtest chain (BNG regtest genesis differs from upstream), so snapshot activation/tests do not reference stale upstream hashes.
 
 ## AssumeUTXO: what `m_assumeutxo_data` is
 

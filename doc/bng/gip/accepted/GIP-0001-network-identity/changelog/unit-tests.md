@@ -50,3 +50,27 @@ This note records test-suite changes made to keep the upstream unit tests meanin
 - `src/test/descriptor_tests.cpp`
 - `src/test/net_peer_connection_tests.cpp`
 - `doc/bng/gip/accepted/GIP-0001-network-identity/test/happy-tests.md`
+
+---
+
+**Date**: 2026-02-27
+
+## Summary
+
+- Updated unit tests to stay correct under BNG’s network identity (Bech32 HRP) and BNG’s modified regtest genesis/chain.
+- Aligned regtest AssumeUTXO snapshot lookup tests with the chainparams-provided blockhash at height 110 (avoid hard-coding upstream regtest hashes).
+
+## Changes
+
+- **`script_standard_tests`**
+  - Upstream Taproot vector expectations include Bitcoin Bech32m addresses (`bc1p...`).
+  - Tests now re-encode expected addresses under the active chainparams (so BNG HRPs like `bng...` are accepted where appropriate).
+
+- **`validation_tests` (AssumeUTXO)**
+  - Avoid hard-coding an upstream regtest base blockhash.
+  - The test now looks up the AssumeUTXO entry by using the `blockhash` returned from `AssumeutxoForHeight(110)`.
+
+## Files
+
+- `src/test/script_standard_tests.cpp`
+- `src/test/validation_tests.cpp`
