@@ -123,7 +123,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #119: txvalidationcache_tests
 - [x] Test #120: uint256_tests
 - [x] Test #121: util_string_tests
-- [ ] Test #122: util_tests
+- [x] Test #122: util_tests
 - [x] Test #123: util_threadnames_tests
 - [x] Test #124: util_trace_tests
 - [x] Test #125: validation_block_tests
