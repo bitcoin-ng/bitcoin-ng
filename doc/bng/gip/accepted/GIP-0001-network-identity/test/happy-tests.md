@@ -93,7 +93,7 @@ Fix those tests one at a time until all pass:
 - [x] Test  #89: script_p2sh_tests
 - [x] Test  #90: script_parse_tests
 - [x] Test  #91: script_segwit_tests
-- [ ] Test  #92: script_standard_tests
+- [x] Test  #92: script_standard_tests
 - [x] Test  #93: script_tests
 - [x] Test  #94: scriptnum_tests
 - [x] Test  #95: serfloat_tests
@@ -128,7 +128,7 @@ Fix those tests one at a time until all pass:
 - [x] Test #124: util_trace_tests
 - [x] Test #125: validation_block_tests
 - [x] Test #126: validation_chainstate_tests
-- [ ] Test #127: validation_chainstatemanager_tests
+- [x] Test #127: validation_chainstatemanager_tests
 - [x] Test #128: validation_flush_tests
 - [x] Test #129: validation_tests
 - [x] Test #130: validationinterface_tests
@@ -151,8 +151,8 @@ Fix those tests one at a time until all pass:
 - [x] Test #147: walletload_tests
 - [x] Test #148: ipc_tests
 - [x] Test #149: bng_regtest_init_tests (CTest wrapper for TestChain100Setup regtest bootstrap smoke)
-- [ ] (CTest #86) bng_bip32_identity_tests
-- [ ] (CTest #87) bng_bip324_identity_tests
-- [ ] (CTest #88) bng_network_identity_values_tests
-- [ ] (CTest #89) bng_bloom_tests
-- [ ] (CTest #90) bng_reencode_helpers_tests
+- [x] (CTest #86) bng_bip32_identity_tests
+- [x] (CTest #87) bng_bip324_identity_tests
+- [x] (CTest #88) bng_network_identity_values_tests
+- [x] (CTest #89) bng_bloom_tests
+- [x] (CTest #90) bng_reencode_helpers_tests
