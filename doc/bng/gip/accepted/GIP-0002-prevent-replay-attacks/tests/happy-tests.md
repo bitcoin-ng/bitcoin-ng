@@ -2,9 +2,9 @@
 
 Current `ctest --test-dir build --output-on-failure -j12` status for replay-protection work:
 
-- Passed: 152/154
-- Failing: 2/154
-- Current failures: `Test #99: script_tests`, `Test #116: transaction_tests`
+- Passed: 155/155
+- Failing: 0/155
+- Current failures: none
 
 Fix those tests one at a time until all pass:
 
@@ -97,68 +97,69 @@ Fix those tests one at a time until all pass:
 - [x] Test #87: bng_bip324_identity_tests
 - [x] Test #88: bng_network_identity_values_tests
 - [x] Test #89: bng_bloom_tests
-- [x] Test #90: bng_reencode_helpers_tests
-- [x] Test #91: rpc_tests
-- [x] Test #92: sanity_tests
-- [x] Test #93: scheduler_tests
-- [x] Test #94: script_assets_tests
-- [x] Test #95: script_p2sh_tests
-- [x] Test #96: script_parse_tests
-- [x] Test #97: script_segwit_tests
-- [x] Test #98: script_standard_tests
-- [ ] Test #99: script_tests
-- [x] Test #100: scriptnum_tests
-- [x] Test #101: serfloat_tests
-- [x] Test #102: serialize_tests
-- [x] Test #103: settings_tests
-- [x] Test #104: sighash_tests
-- [x] Test #105: sigopcount_tests
-- [x] Test #106: skiplist_tests
-- [x] Test #107: sock_tests
-- [x] Test #108: span_tests
-- [x] Test #109: streams_tests
-- [x] Test #110: sync_tests
-- [x] Test #111: system_ram_tests
-- [x] Test #112: system_tests
-- [x] Test #113: testnet4_miner_tests
-- [x] Test #114: timeoffsets_tests
-- [x] Test #115: torcontrol_tests
-- [ ] Test #116: transaction_tests
-- [x] Test #117: translation_tests
-- [x] Test #118: txdownload_tests
-- [x] Test #119: txgraph_tests
-- [x] Test #120: txindex_tests
-- [x] Test #121: txpackage_tests
-- [x] Test #122: txreconciliation_tests
-- [x] Test #123: txrequest_tests
-- [x] Test #124: txvalidation_tests
-- [x] Test #125: txvalidationcache_tests
-- [x] Test #126: uint256_tests
-- [x] Test #127: util_string_tests
-- [x] Test #128: util_tests
-- [x] Test #129: util_threadnames_tests
-- [x] Test #130: util_trace_tests
-- [x] Test #131: validation_block_tests
-- [x] Test #132: validation_chainstate_tests
-- [x] Test #133: validation_chainstatemanager_tests
-- [x] Test #134: validation_flush_tests
-- [x] Test #135: validation_tests
-- [x] Test #136: validationinterface_tests
-- [x] Test #137: versionbits_tests
-- [x] Test #138: db_tests
-- [x] Test #139: coinselector_tests
-- [x] Test #140: coinselection_tests
-- [x] Test #141: feebumper_tests
-- [x] Test #142: group_outputs_tests
-- [x] Test #143: init_tests
-- [x] Test #144: ismine_tests
-- [x] Test #145: psbt_wallet_tests
-- [x] Test #146: scriptpubkeyman_tests
-- [x] Test #147: spend_tests
-- [x] Test #148: wallet_crypto_tests
-- [x] Test #149: wallet_rpc_tests
-- [x] Test #150: wallet_tests
-- [x] Test #151: wallet_transaction_tests
-- [x] Test #152: walletdb_tests
-- [x] Test #153: walletload_tests
-- [x] Test #154: ipc_tests
+- [x] Test #90: bng_replay_protection_tests
+- [x] Test #91: bng_reencode_helpers_tests
+- [x] Test #92: rpc_tests
+- [x] Test #93: sanity_tests
+- [x] Test #94: scheduler_tests
+- [x] Test #95: script_assets_tests
+- [x] Test #96: script_p2sh_tests
+- [x] Test #97: script_parse_tests
+- [x] Test #98: script_segwit_tests
+- [x] Test #99: script_standard_tests
+- [x] Test #100: script_tests
+- [x] Test #101: scriptnum_tests
+- [x] Test #102: serfloat_tests
+- [x] Test #103: serialize_tests
+- [x] Test #104: settings_tests
+- [x] Test #105: sighash_tests
+- [x] Test #106: sigopcount_tests
+- [x] Test #107: skiplist_tests
+- [x] Test #108: sock_tests
+- [x] Test #109: span_tests
+- [x] Test #110: streams_tests
+- [x] Test #111: sync_tests
+- [x] Test #112: system_ram_tests
+- [x] Test #113: system_tests
+- [x] Test #114: testnet4_miner_tests
+- [x] Test #115: timeoffsets_tests
+- [x] Test #116: torcontrol_tests
+- [x] Test #117: transaction_tests
+- [x] Test #118: translation_tests
+- [x] Test #119: txdownload_tests
+- [x] Test #120: txgraph_tests
+- [x] Test #121: txindex_tests
+- [x] Test #122: txpackage_tests
+- [x] Test #123: txreconciliation_tests
+- [x] Test #124: txrequest_tests
+- [x] Test #125: txvalidation_tests
+- [x] Test #126: txvalidationcache_tests
+- [x] Test #127: uint256_tests
+- [x] Test #128: util_string_tests
+- [x] Test #129: util_tests
+- [x] Test #130: util_threadnames_tests
+- [x] Test #131: util_trace_tests
+- [x] Test #132: validation_block_tests
+- [x] Test #133: validation_chainstate_tests
+- [x] Test #134: validation_chainstatemanager_tests
+- [x] Test #135: validation_flush_tests
+- [x] Test #136: validation_tests
+- [x] Test #137: validationinterface_tests
+- [x] Test #138: versionbits_tests
+- [x] Test #139: db_tests
+- [x] Test #140: coinselector_tests
+- [x] Test #141: coinselection_tests
+- [x] Test #142: feebumper_tests
+- [x] Test #143: group_outputs_tests
+- [x] Test #144: init_tests
+- [x] Test #145: ismine_tests
+- [x] Test #146: psbt_wallet_tests
+- [x] Test #147: scriptpubkeyman_tests
+- [x] Test #148: spend_tests
+- [x] Test #149: wallet_crypto_tests
+- [x] Test #150: wallet_rpc_tests
+- [x] Test #151: wallet_tests
+- [x] Test #152: wallet_transaction_tests
+- [x] Test #153: walletdb_tests
+- [x] Test #154: walletload_tests
+- [x] Test #155: ipc_tests

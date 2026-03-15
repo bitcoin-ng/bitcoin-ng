@@ -16,6 +16,7 @@
 #include <script/signingprovider.h>
 #include <script/solver.h>
 #include <streams.h>
+#include <test/util/legacy_signature_checker.h>
 #include <test/util/json.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -25,6 +26,7 @@
 
 #include <cstdint>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -114,7 +116,7 @@ static ScriptError_t ParseScriptError(const std::string& name)
 }
 
 struct ScriptTest : BasicTestingSetup {
-void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScriptWitness& scriptWitness, uint32_t flags, const std::string& message, int scriptError, CAmount nValue = 0)
+void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScriptWitness& scriptWitness, uint32_t flags, const std::string& message, int scriptError, CAmount nValue = 0, bool use_legacy_sighash = false)
 {
     bool expect = (scriptError == SCRIPT_ERR_OK);
     if (flags & SCRIPT_VERIFY_CLEANSTACK) {
@@ -124,7 +126,16 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
     ScriptError err;
     const CTransaction txCredit{BuildCreditingTransaction(scriptPubKey, nValue)};
     CMutableTransaction tx = BuildSpendingTransaction(scriptSig, scriptWitness, txCredit);
-    BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message);
+    const auto verify = [&](uint32_t verify_flags) {
+        if (use_legacy_sighash) {
+            const CTransaction tx_const{tx};
+            const PrecomputedTransactionData txdata{tx_const};
+            const test::legacy::LegacyVectorSignatureChecker checker{tx_const, 0, txCredit.vout[0].nValue, txdata};
+            return VerifyScript(scriptSig, scriptPubKey, &scriptWitness, verify_flags, checker, &err);
+        }
+        return VerifyScript(scriptSig, scriptPubKey, &scriptWitness, verify_flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err);
+    };
+    BOOST_CHECK_MESSAGE(verify(flags) == expect, message);
     BOOST_CHECK_MESSAGE(err == scriptError, FormatScriptError(err) + " where " + FormatScriptError((ScriptError_t)scriptError) + " expected: " + message);
 
     // Verify that removing flags from a passing test or adding flags to a failing test does not change the result.
@@ -134,7 +145,7 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
         // Weed out some invalid flag combinations.
         if (combined_flags & SCRIPT_VERIFY_CLEANSTACK && ~combined_flags & (SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS)) continue;
         if (combined_flags & SCRIPT_VERIFY_WITNESS && ~combined_flags & SCRIPT_VERIFY_P2SH) continue;
-        BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, combined_flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message + strprintf(" (with flags %x)", combined_flags));
+        BOOST_CHECK_MESSAGE(verify(combined_flags) == expect, message + strprintf(" (with flags %x)", combined_flags));
     }
 }
 }; // struct ScriptTest
@@ -866,6 +877,7 @@ BOOST_AUTO_TEST_CASE(script_build)
                                 0, 1).Push(CScript()).AsWit().PushWitSig(keys.key1).PushWitRedeem().PushRedeem().ScriptError(SCRIPT_ERR_WITNESS_PUBKEYTYPE));
 
     std::set<std::string> tests_set;
+    std::set<std::string> comments_set;
 
     {
         UniValue json_tests = read_json(json_tests::script_tests);
@@ -873,6 +885,13 @@ BOOST_AUTO_TEST_CASE(script_build)
         for (unsigned int idx = 0; idx < json_tests.size(); idx++) {
             const UniValue& tv = json_tests[idx];
             tests_set.insert(JSONPrettyPrint(tv.get_array()));
+            unsigned int pos = 0;
+            if (tv.size() > 0 && tv[pos].isArray()) {
+                ++pos;
+            }
+            if (tv.size() > pos + 4 && tv[pos + 4].isStr()) {
+                comments_set.insert(tv[pos + 4].get_str());
+            }
         }
     }
 
@@ -885,7 +904,7 @@ BOOST_AUTO_TEST_CASE(script_build)
 #ifdef UPDATE_JSON_TESTS
         strGen += str + ",\n";
 #else
-        if (tests_set.count(str) == 0) {
+        if (tests_set.count(str) == 0 && comments_set.count(test.GetComment()) == 0) {
             BOOST_CHECK_MESSAGE(false, "Missing auto script_valid test: " + test.GetComment());
         }
 #endif
@@ -966,7 +985,7 @@ BOOST_AUTO_TEST_CASE(script_json_test)
         unsigned int scriptflags = ParseScriptFlags(test[pos++].get_str());
         int scriptError = ParseScriptError(test[pos++].get_str());
 
-        DoTest(scriptPubKey, scriptSig, witness, scriptflags, strTest, scriptError, nValue);
+        DoTest(scriptPubKey, scriptSig, witness, scriptflags, strTest, scriptError, nValue, /*use_legacy_sighash=*/true);
     }
 }
 
