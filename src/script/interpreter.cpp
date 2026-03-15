@@ -1504,6 +1504,7 @@ bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, cons
     // Epoch
     static constexpr uint8_t EPOCH = 0;
     ss << EPOCH;
+    ss << BNG_REPLAY_PROTECTION_FORKID;
 
     // Hash type
     const uint8_t output_type = (hash_type == SIGHASH_DEFAULT) ? SIGHASH_ALL : (hash_type & SIGHASH_OUTPUT_MASK); // Default (no sighash byte) is equivalent to SIGHASH_ALL
@@ -1606,12 +1607,14 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
         }
     }
 
+    const uint32_t forked_hash_type = ForkedSighashType(static_cast<uint8_t>(nHashType));
+
     HashWriter ss{};
 
     // Try to compute using cached SHA256 midstate.
     if (sighash_cache && sighash_cache->Load(nHashType, scriptCode, ss)) {
         // Add sighash type and hash.
-        ss << nHashType;
+        ss << forked_hash_type;
         return ss.GetHash();
     }
 
@@ -1667,7 +1670,7 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
     }
 
     // Add sighash type and hash.
-    ss << nHashType;
+    ss << forked_hash_type;
     return ss.GetHash();
 }
 

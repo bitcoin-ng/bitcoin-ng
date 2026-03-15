@@ -37,6 +37,13 @@ enum
     SIGHASH_INPUT_MASK = 0x80,
 };
 
+static constexpr uint32_t BNG_REPLAY_PROTECTION_FORKID = 0x00474E42;
+
+constexpr uint32_t ForkedSighashType(uint8_t sighash_byte)
+{
+    return static_cast<uint32_t>(sighash_byte) | (BNG_REPLAY_PROTECTION_FORKID << 8);
+}
+
 /** Script verification flags.
  *
  *  All flags are intended to be soft forks: the set of acceptable scripts under

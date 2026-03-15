@@ -293,3 +293,190 @@ BNG-0002 is “done” when all of the following are true:
 - Unit tests include at least one proof that a Bitcoin-style signature fails on BNG.
 - Updated sighash vector tests pass.
 - A functional test demonstrates old-style tx rejection and new-style tx acceptance.
+
+---
+
+## 2026-03-15 exact execution plan for this repo
+
+This section resolves the remaining implementation choices against the current `bitcoin-ng` tree so the work can be executed in a straight line.
+
+### Resolved choices for the first implementation pass
+
+1. **Activation model:** treat replay protection as **always on** for BNG.
+   - Do **not** add height-gated activation machinery in this pass.
+   - Do **not** add a new buried deployment or `-testactivationheight` hook yet.
+   - Rationale: the current repo already behaves as a distinct BNG chain on all shipped networks, and adding height plumbing would significantly widen the patch surface.
+
+2. **Forkid source of truth:** use a single consensus constant for now.
+   - Standardize the name to `BNG_REPLAY_PROTECTION_FORKID`.
+   - Value: `0x00474E42`.
+   - Serialize little-endian where committed into preimages.
+   - Recommended placement: `src/script/interpreter.h` with definition in `src/script/interpreter.cpp` if needed.
+   - Follow-up if needed later: move to `Consensus::Params` only if per-network configurability becomes necessary.
+
+3. **ECDSA forked hashtype mapping:** use:
+   - `ForkedSighashType(sighash_byte) = uint32_t(sighash_byte) | (BNG_REPLAY_PROTECTION_FORKID << 8)`
+   - This preserves the low byte used in the DER-appended sighash marker while changing the 32-bit committed value.
+
+4. **SigHashCache behavior:** keep the existing cache slot selection logic.
+   - `SigHashCache::CacheIndex()` only depends on the low-bit sighash mode and `ANYONECANPAY`, which still come from the unchanged script-level sighash byte.
+   - The production cache API does **not** need a new key type for the always-on constant approach.
+   - Tests that manually reconstruct cached hashes **do** need to append the forked 32-bit value instead of the old raw `hash_type`.
+
+### Exact code sequence
+
+#### Step 1: introduce the replay-protection helpers
+
+**Files:**
+- `src/script/interpreter.h`
+- `src/script/interpreter.cpp`
+
+**Edits:**
+- Add `BNG_REPLAY_PROTECTION_FORKID`.
+- Add a small helper for the ECDSA path:
+  - `static inline uint32_t ForkedSighashType(uint8_t sighash_byte)`
+- Add a helper for the taproot path if it improves readability:
+  - e.g. `static constexpr uint32_t BNG_REPLAY_PROTECTION_FORKID = ...`
+
+**Definition rules:**
+- Low 8 bits remain the original sighash byte.
+- Upper 24 bits commit to the BNG forkid.
+- With `0x00474E42`, the committed ECDSA hashtype bytes become `[sighash_byte, 0x42, 0x4e, 0x47]`.
+
+#### Step 2: change ECDSA sighash construction
+
+**Primary file:**
+- `src/script/interpreter.cpp`
+
+**Function:**
+- `SignatureHash(...)`
+
+**Edits:**
+- Compute the forked 32-bit committed hashtype once near the top of the function, after the `SIGHASH_SINGLE` out-of-range check:
+  - `const uint32_t forked_hash_type = ForkedSighashType(uint8_t(nHashType));`
+- Replace the final `ss << nHashType;` in both cache-hit and cache-miss paths with:
+  - `ss << forked_hash_type;`
+- Leave all mode branching (`ALL/NONE/SINGLE`, `ANYONECANPAY`) driven by the original `nHashType`, because script-visible sighash semantics do not change.
+
+**Important non-change:**
+- Do **not** alter the 1-byte sighash appended to serialized signatures in signing code.
+
+#### Step 3: change taproot/tapscript sighash construction
+
+**Primary file:**
+- `src/script/interpreter.cpp`
+
+**Function:**
+- `SignatureHashSchnorr(...)`
+
+**Edits:**
+- Insert the 4-byte little-endian `BNG_REPLAY_PROTECTION_FORKID` into the `TapSighash` preimage immediately after the epoch byte and before the 1-byte `hash_type`.
+- Keep the existing hashtype validation rules unchanged:
+  - `SIGHASH_DEFAULT`
+  - `SIGHASH_ALL`
+  - `SIGHASH_NONE`
+  - `SIGHASH_SINGLE`
+  - optional `SIGHASH_ANYONECANPAY`
+
+**Result:**
+- Key-path and script-path schnorr signatures become BNG-specific without changing the externally encoded 64/65-byte signature format.
+
+#### Step 4: rebuild any direct sighash call sites that assume Bitcoin outputs
+
+These call sites should compile unchanged if the helper stays internal to `interpreter.cpp`, but they must be reviewed because their expected values or comments may now be wrong.
+
+**Signing paths to verify:**
+- `src/script/sign.cpp`
+
+**Direct hash users to review/update:**
+- `src/bench/verify_script.cpp`
+- `src/test/script_tests.cpp`
+- `src/test/multisig_tests.cpp`
+- `src/test/txvalidationcache_tests.cpp`
+- `src/test/fuzz/script_interpreter.cpp`
+- `src/test/sighash_tests.cpp`
+
+**Expectation:**
+- No caller should need to pass a new forkid argument in the first pass.
+- The behavioral change comes entirely from the hashing functions.
+
+#### Step 5: update unit tests to match BNG consensus
+
+**Primary file:**
+- `src/test/sighash_tests.cpp`
+
+**Concrete edits:**
+- Keep `SignatureHashOld(...)` as a Bitcoin-legacy helper for negative testing only.
+- Remove or invert the assertion that BASE `SignatureHash(...) == SignatureHashOld(...)`.
+- Add explicit checks that:
+  - BASE BNG sighash differs from `SignatureHashOld(...)`.
+  - repeated cache/no-cache computations still match each other.
+- In the cache-manipulation portion of the test, update the manually appended hashtype from raw `hash_type` to the forked 32-bit committed value.
+
+**Why this matters:**
+- Today the cache test reconstructs a midstate and appends `hash_type` manually.
+- After the replay-protection change, that manual reconstruction will silently encode the wrong digest unless it is updated.
+
+#### Step 6: replace Bitcoin-based sighash vectors
+
+**Files:**
+- `src/test/data/sighash.json`
+- `src/test/data/sighash.json.h`
+- `src/test/sighash_tests.cpp`
+- any local generator or fixture workflow used by `PRINT_SIGHASH_JSON`
+
+**Concrete plan:**
+- Regenerate vectors from the modified BNG `SignatureHash(...)` implementation.
+- Keep the vector format unchanged if possible; only replace expected digest values.
+- Ensure the committed values reflect the BNG forked ECDSA digest, not upstream Bitcoin values.
+
+**Open check while doing this step:**
+- Confirm whether `src/test/data/sighash.json.h` is generated in-tree or committed manually from `src/test/data/sighash.json`.
+
+#### Step 7: add targeted replay-protection proofs
+
+**Recommended file:**
+- rather then `src/test/script_tests.cpp`, do add a new dedicated replay-protection test file under `src/test/bng/`
+
+**Add at least these cases:**
+- BASE: old Bitcoin-style ECDSA signature fails, BNG-style signature succeeds.
+- WITNESS_V0: old Bitcoin-style BIP143 digest signature fails, BNG-style signature succeeds.
+- TAPROOT key-path: old taproot preimage without forkid fails, BNG-style succeeds.
+- TAPSCRIPT script-path: same proof for tapscript if practical in the same file.
+
+**Implementation detail:**
+- For segwit v0 and taproot, create test-local “old behavior” helpers instead of trying to keep production code dual-mode.
+
+#### Step 8: add one end-to-end functional test
+
+**Recommended location:**
+- `test/functional/`
+
+**Scenario:**
+1. Mine spendable coins.
+2. Build a standard witness spend, preferably P2WPKH for the first pass.
+3. Produce one transaction signed with the old digest and one signed with the BNG digest.
+4. Assert the old-style raw transaction is rejected.
+5. Assert the BNG-style raw transaction is accepted.
+
+**Why P2WPKH first:**
+- It exercises replay protection in a common modern path without the extra control-block/script-path setup taproot tests need.
+
+### Current open items after this plan update
+
+These are the only meaningful items still open before coding starts:
+
+- the replay-protection proof tests live in new `src/test/bng/replay_protection_tests.cpp`.
+- Confirm the preferred fixture regeneration workflow for `sighash.json` / `sighash.json.h`.
+- patch the accepted GIP `README.md` eventually to stop overstating current implementation status
+
+### Recommended implementation order
+
+Use this exact order to minimize rework:
+
+1. Patch `src/script/interpreter.*` for ECDSA and schnorr digest separation.
+2. Run/build unit tests that compile the direct sighash users.
+3. Fix `src/test/sighash_tests.cpp` cache/equality assumptions.
+4. Regenerate and commit updated sighash fixtures.
+5. Add replay-protection proof tests.
+6. Add the functional test last.
