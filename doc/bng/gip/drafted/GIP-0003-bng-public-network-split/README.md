@@ -1,12 +1,17 @@
-# BNG-0003: BNG-Owned Public Network Split ("BNG Signet")
+# BNG-0003: BNG-Owned Public Test Network ("bngsignet")
 
 **Status**: Draft
 **Created**: 2026-01-24
 
-## Abstract
-This GIP proposes introducing a BNG-owned, public, coordinated test network (informally “BNG signet”) that is fully under BNG’s control and identity, and gradually moving away from relying on upstream Bitcoin public networks (notably Bitcoin signet and testnet4) for BNG development, CI, and interoperability testing.
+## Summary (one paragraph)
+This GIP is about starting a **BNG-owned public test network** (signet-like coordination via BIP325), implemented as a new selectable chain (tentatively `bngsignet`) with its own genesis and network identity.
 
-The proposal also documents a path to reduce ongoing upstream-network-specific maintenance inside BNG by isolating upstream network definitions behind explicit build/runtime options.
+It is **not** a proposal to change existing BNG MAIN/TESTNET/REGTEST constants (GIP-0001) and it is **not** the replay-protection mechanism itself (GIP-0002).
+
+## Abstract
+This GIP proposes introducing a BNG-owned, public, coordinated test network (informally “BNG signet”) that is fully under BNG’s control, and gradually moving away from relying on upstream Bitcoin public networks (notably Bitcoin signet and testnet4) for BNG development, CI, and interoperability testing.
+
+It also documents a path to reduce ongoing upstream-network-specific maintenance inside BNG by isolating upstream network definitions behind explicit build/runtime options.
 
 ## Motivation
 BNG currently carries upstream public-network definitions (e.g., Bitcoin signet/testnet4) because:
