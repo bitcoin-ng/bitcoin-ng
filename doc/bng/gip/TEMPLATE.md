@@ -38,7 +38,7 @@ Concrete commands and expected outputs.
 Example:
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build -j$(nproc)
+cmake --build build --parallel
 ctest --test-dir build -R <relevant_suite> --output-on-failure
 ```
 
