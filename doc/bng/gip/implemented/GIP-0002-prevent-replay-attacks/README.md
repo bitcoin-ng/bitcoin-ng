@@ -1,6 +1,6 @@
 # BNG-0002: Replay Attack Protection
 
-**Status**: Accepted
+**Status**: implemented
 **Created**: 2026-01-17
 
 ## Abstract

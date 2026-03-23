@@ -8,9 +8,9 @@ For individual proposals see [`doc/bng/gip/`](gip/).
 | GIP | Title | Status |
 |-----|-------|--------|
 | [GIP-0001](gip/implemented/GIP-0001-network-identity/README.md) | Network Identity | ✅ Implemented |
-| [GIP-0002](gip/accepted/GIP-0002-prevent-replay-attacks/README.md) | Prevent Replay Attacks (SIGHASH_FORKID) | 🔵 Accepted |
-| [GIP-0003](gip/drafted/GIP-0003-dual-mining-difficulty/README.md) | Dual Mining Difficulty (energy + memory lanes) | 📝 Drafted |
-| [GIP-0004](gip/drafted/GIP-0004-ctam-rest-mining-interface/README.md) | CTAM REST Mining Interface | 📝 Drafted |
+| [GIP-0002](gip/implemented/GIP-0002-prevent-replay-attacks/README.md) | Prevent Replay Attacks (SIGHASH_FORKID) | ✅ Implemented |
+| [GIP-0003](gip/accepted/GIP-0003-dual-mining-difficulty/README.md) | Dual Mining Difficulty (energy + memory lanes) | 🔵 Accepted |
+| [GIP-0004](gip/accepted/GIP-0004-ctam-rest-mining-interface/README.md) | CTAM REST Mining Interface | 🔵 Accepted |
 | [GIP-0005](gip/drafted/GIP-0005-script-reserved-noops/README.md) | Script Reserved No-Op Opcodes | 📝 Drafted |
 | [GIP-0006](gip/drafted/GIP-0006-pre-genesis-checks/README.md) | Pre-Genesis Checks | 📝 Drafted |
 | [GIP-0007](gip/drafted/GIP-0007-post-genesis-followups/TODO) | Post-Genesis Follow-Ups | 📝 Drafted |
@@ -21,36 +21,44 @@ For individual proposals see [`doc/bng/gip/`](gip/).
 ```mermaid
 flowchart TD
     G1["GIP-0001 Network Identity ✅ Implemented"]
-    G2["GIP-0002 Prevent Replay Attacks (SIGHASH_FORKID) 🔵 Accepted"]
+    G2["GIP-0002 Prevent Replay Attacks (SIGHASH_FORKID) ✅ Implemented"]
+    R1["Release v0.1.0"]
+    G3["GIP-0003 Dual Mining Difficulty (energy + memory lanes) 🔵 Accepted"]
+    G4["GIP-0004 CTAM REST Mining Interface 🔵 Accepted"]
     G5["GIP-0005 Script Reserved No-Op Opcodes 📝 Drafted"]
     G6["GIP-0006 Pre-Genesis Checks 📝 Drafted"]
     G7["GIP-0007 Post-Genesis Follow-Ups 📝 Drafted"]
     G8["GIP-0008 BNG Public Test Network (bngsignet) 📝 Drafted"]
-    G3["GIP-0003 Dual Mining Difficulty (energy + memory lanes) 📝 Drafted"]
-    G4["GIP-0004 CTAM REST Mining Interface 📝 Drafted"]
+    R2["Release v0.2.0"]
 
     G1 --> G2
-    G1 --> G8
-    G2 --> G8
+    G2 -.->|"release v0.1.0"| R1
 
-    G1 --> G5
-    G1 --> G6
-    G6 --> G7
-
-    G1 --> G3
+    G2 --> G3
     G3 --> G4
+    G4 --> G5
+    G5 --> G6
+    G6 -.->|"release v0.2.0"| R2
 
-    G8 -.->|"test infra for"| G3
-    G8 -.->|"test infra for"| G5
+    R1 --> R2
+    R2 --> G7
+    R2 -.->|"optional track"| G8
 
     classDef implemented fill:#2d6a2d,color:#fff,stroke:#1a4a1a
     classDef accepted    fill:#1a4472,color:#fff,stroke:#0d2a4a
     classDef drafted     fill:#555,color:#eee,stroke:#333
+    classDef release     fill:#6b5b1a,color:#fff,stroke:#4a3d0d
 
-    class G1 implemented
-    class G2 accepted
-    class G8,G5,G6,G7,G3,G4 drafted
+    class G1,G2 implemented
+    class G3,G4 accepted
+    class G8,G5,G6,G7 drafted
+    class R1,R2 release
 ```
+
+## Release Milestones
+
+- **Release v0.1.0** ships the minimum BNG foundation: **GIP-0001** network identity and **GIP-0002** replay protection.
+- **Release v0.2.0** groups the first intentional feature drift away from Bitcoin Core after the `v0.1.0` baseline, centered on **GIP-0003**, **GIP-0004**, **GIP-0005**, and **GIP-0006**.
 
 ## Phases
 
@@ -72,9 +80,9 @@ flowchart TD
 ### Phase 5 — Post-Genesis Follow-Ups
 - **GIP-0007** tracks the first post-genesis follow-ups after BNG mainnet has matured enough to choose a stable checkpoint for `nMinimumChainWork` and `defaultAssumeValid`.
 
-### Phase 6 — Test Infrastructure
+### Phase 6 — Optional Public Test Network
 - **GIP-0008** introduces a BNG-owned public coordinated test network (`bngsignet`) using BIP325 signet-like block signing.  
-  Unblocks reliable public integration testing for all subsequent work.
+  This is an optional track rather than a required dependency for the main roadmap.
 
 ## Open Questions Blocking Progression
 
@@ -85,5 +93,4 @@ flowchart TD
 | GIP-0005 | Final opcode byte assignments (collision audit required) |
 | GIP-0006 | Final mainnet launch timestamp; confirmed production DNS seed operators |
 | GIP-0007 | Which block height/hash should become the first stable `nMinimumChainWork` / `defaultAssumeValid` checkpoint |
-| GIP-0008 | Final chain name (`bngsignet`?), HRP, signet challenge key operations |
 

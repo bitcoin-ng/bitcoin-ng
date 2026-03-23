@@ -1,6 +1,6 @@
 # BNG-0003: Dual Mining Difficulty
 
-**Status**: drafted
+**Status**: accepted
 **Created**: 2026-03-23
 
 ## Abstract
@@ -150,3 +150,4 @@ Targeted validation should include:
 
 ## Changelog
 - 2026-03-23: drafted
+- 2026-03-23: accepted

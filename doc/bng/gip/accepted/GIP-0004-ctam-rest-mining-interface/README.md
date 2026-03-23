@@ -1,6 +1,6 @@
 # BNG-0004: CTAM REST Mining Interface
 
-**Status**: drafted
+**Status**: accepted
 **Created**: 2026-03-23
 
 ## Abstract
@@ -76,3 +76,4 @@ Initial coverage should include:
 
 ## Changelog
 - 2026-03-23: drafted
+- 2026-03-23: accepted
