@@ -27,6 +27,7 @@
 
 #include <test/util/setup_common.h>
 
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -720,6 +721,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     static_assert(std::size(BLOCKINFO) == 110, "Should have 110 blocks to import");
     int baseheight = 0;
     std::vector<CTransactionRef> txFirst;
+    const auto& consensus{Assert(m_node.chainman)->GetParams().GetConsensus()};
     for (const auto& bi : BLOCKINFO) {
         const int current_height{mining->getTip()->height};
 
@@ -749,8 +751,19 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             if (txFirst.size() < 4)
                 txFirst.push_back(block.vtx[0]);
             block.hashMerkleRoot = BlockMerkleRoot(block);
-            block.nNonce = bi.nonce;
         }
+
+        // The block template does not have proof-of-work, so solve it.
+        bool solved{false};
+        for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
+            block.nNonce = nonce;
+            if (CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+                solved = true;
+                break;
+            }
+        }
+        BOOST_REQUIRE(solved);
+
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(block);
         // Alternate calls between Chainman's ProcessNewBlock and submitSolution
         // via the Mining interface. The former is used by net_processing as well

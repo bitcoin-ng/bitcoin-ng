@@ -4,6 +4,7 @@
 
 #include <key.h>
 
+#include <base58.h>
 #include <common/system.h>
 #include <key_io.h>
 #include <span.h>
@@ -23,32 +24,64 @@
 using namespace util::hex_literals;
 using util::ToString;
 
-static const std::string strSecret1 = "5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj";
-static const std::string strSecret2 = "5KC4ejrDjv152FGwP386VD1i2NYc5KkfSMyv1nGy1VGDxGHqVY3";
-static const std::string strSecret1C = "Kwr371tjA9u2rFSMZjTNun2PXXP3WPZu2afRHTcta6KxEUdm1vEw";
-static const std::string strSecret2C = "L3Hq7a8FEQwJkW1M2GNKDW28546Vp5miewcCzSqUD9kCAXrJdS3g";
-static const std::string addr1 = "1QFqqMUD55ZV3PJEJZtaKCsQmjLT6JkjvJ";
-static const std::string addr2 = "1F5y5E5FMc5YzdJtB9hLaUe43GDxEKXENJ";
-static const std::string addr1C = "1NoJrossxPBKfCHuJXT4HadJrXRE9Fxiqs";
-static const std::string addr2C = "1CRj2HyM1CXWzHAXLQtiGLyggNT9WQqsDs";
+namespace {
 
-static const std::string strAddressBad = "1HV9Lc3sNHZxwj4Zk6fB38tEmBryq2cBiF";
+struct WifPayload {
+    std::vector<unsigned char> key_bytes;
+    bool compressed{false};
+};
+
+WifPayload ExtractKeyFromWifPayload(const std::string& wif)
+{
+    // Decode payload without consulting chain params (prefix differs for BNG).
+    std::vector<unsigned char> data;
+    BOOST_REQUIRE(DecodeBase58Check(wif, data, 34));
+    BOOST_REQUIRE(data.size() == 33U || (data.size() == 34U && data.back() == 1));
+
+    const bool compressed = (data.size() == 34U);
+    const size_t prefix_len = data.size() - 32U - (compressed ? 1U : 0U);
+    BOOST_REQUIRE(prefix_len >= 1U);
+
+    WifPayload out;
+    out.compressed = compressed;
+    out.key_bytes.assign(data.begin() + prefix_len, data.begin() + prefix_len + 32U);
+    BOOST_REQUIRE_EQUAL(out.key_bytes.size(), 32U);
+    return out;
+}
+
+// Bitcoin WIF strings used only as stable containers for private key bytes.
+const std::string BITCOIN_WIF_1  = "5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj";
+const std::string BITCOIN_WIF_2  = "5KC4ejrDjv152FGwP386VD1i2NYc5KkfSMyv1nGy1VGDxGHqVY3";
+const std::string BITCOIN_WIF_1C = "Kwr371tjA9u2rFSMZjTNun2PXXP3WPZu2afRHTcta6KxEUdm1vEw";
+const std::string BITCOIN_WIF_2C = "L3Hq7a8FEQwJkW1M2GNKDW28546Vp5miewcCzSqUD9kCAXrJdS3g";
+
+} // namespace
 
 
 BOOST_FIXTURE_TEST_SUITE(key_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(key_test1)
 {
-    CKey key1  = DecodeSecret(strSecret1);
+    const auto p1 = ExtractKeyFromWifPayload(BITCOIN_WIF_1);
+    const auto p2 = ExtractKeyFromWifPayload(BITCOIN_WIF_2);
+    const auto p1c = ExtractKeyFromWifPayload(BITCOIN_WIF_1C);
+    const auto p2c = ExtractKeyFromWifPayload(BITCOIN_WIF_2C);
+
+    CKey key1;
+    key1.Set(p1.key_bytes.begin(), p1.key_bytes.end(), p1.compressed);
     BOOST_CHECK(key1.IsValid() && !key1.IsCompressed());
-    CKey key2  = DecodeSecret(strSecret2);
+
+    CKey key2;
+    key2.Set(p2.key_bytes.begin(), p2.key_bytes.end(), p2.compressed);
     BOOST_CHECK(key2.IsValid() && !key2.IsCompressed());
-    CKey key1C = DecodeSecret(strSecret1C);
+
+    CKey key1C;
+    key1C.Set(p1c.key_bytes.begin(), p1c.key_bytes.end(), p1c.compressed);
     BOOST_CHECK(key1C.IsValid() && key1C.IsCompressed());
-    CKey key2C = DecodeSecret(strSecret2C);
+
+    CKey key2C;
+    key2C.Set(p2c.key_bytes.begin(), p2c.key_bytes.end(), p2c.compressed);
     BOOST_CHECK(key2C.IsValid() && key2C.IsCompressed());
-    CKey bad_key = DecodeSecret(strAddressBad);
-    BOOST_CHECK(!bad_key.IsValid());
 
     CPubKey pubkey1  = key1. GetPubKey();
     CPubKey pubkey2  = key2. GetPubKey();
@@ -75,10 +108,19 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK(!key2C.VerifyPubKey(pubkey2));
     BOOST_CHECK(key2C.VerifyPubKey(pubkey2C));
 
-    BOOST_CHECK(DecodeDestination(addr1)  == CTxDestination(PKHash(pubkey1)));
-    BOOST_CHECK(DecodeDestination(addr2)  == CTxDestination(PKHash(pubkey2)));
+    // BNG has different address encodings (prefixes/HRPs). Assert roundtrip under selected chain params.
+    const std::string addr1 = EncodeDestination(PKHash(pubkey1));
+    const std::string addr2 = EncodeDestination(PKHash(pubkey2));
+    const std::string addr1C = EncodeDestination(PKHash(pubkey1C));
+    const std::string addr2C = EncodeDestination(PKHash(pubkey2C));
+
+    BOOST_CHECK(DecodeDestination(addr1) == CTxDestination(PKHash(pubkey1)));
+    BOOST_CHECK(DecodeDestination(addr2) == CTxDestination(PKHash(pubkey2)));
     BOOST_CHECK(DecodeDestination(addr1C) == CTxDestination(PKHash(pubkey1C)));
     BOOST_CHECK(DecodeDestination(addr2C) == CTxDestination(PKHash(pubkey2C)));
+
+    // And ensure addresses are not mis-parsed as WIF.
+    BOOST_CHECK(!DecodeSecret(addr1).IsValid());
 
     for (int n=0; n<16; n++)
     {
@@ -165,7 +207,9 @@ BOOST_AUTO_TEST_CASE(key_test1)
 BOOST_AUTO_TEST_CASE(key_signature_tests)
 {
     // When entropy is specified, we should see at least one high R signature within 20 signatures
-    CKey key = DecodeSecret(strSecret1);
+    const auto p1 = ExtractKeyFromWifPayload(BITCOIN_WIF_1);
+    CKey key;
+    key.Set(p1.key_bytes.begin(), p1.key_bytes.end(), p1.compressed);
     std::string msg = "A message to be signed";
     uint256 msg_hash = Hash(msg);
     std::vector<unsigned char> sig;
@@ -336,9 +380,11 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
 
 BOOST_AUTO_TEST_CASE(key_ellswift)
 {
-    for (const auto& secret : {strSecret1, strSecret2, strSecret1C, strSecret2C}) {
-        CKey key = DecodeSecret(secret);
-        BOOST_CHECK(key.IsValid());
+    for (const auto& wif : {BITCOIN_WIF_1, BITCOIN_WIF_2, BITCOIN_WIF_1C, BITCOIN_WIF_2C}) {
+        const auto payload = ExtractKeyFromWifPayload(wif);
+        CKey key;
+        key.Set(payload.key_bytes.begin(), payload.key_bytes.end(), payload.compressed);
+        BOOST_REQUIRE(key.IsValid());
 
         uint256 ent32 = m_rng.rand256();
         auto ellswift = key.EllSwiftCreate(std::as_bytes(std::span{ent32}));

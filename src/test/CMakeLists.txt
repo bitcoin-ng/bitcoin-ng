@@ -82,6 +82,13 @@ add_executable(test_bitcoin
   rest_tests.cpp
   result_tests.cpp
   reverselock_tests.cpp
+  bng/regtest_init_tests.cpp
+  bng/bip32_identity_tests.cpp
+  bng/bip324_identity_tests.cpp
+  bng/network_identity_values_tests.cpp
+  bng/bloom_tests.cpp
+  bng/reencode_helpers.cpp
+  bng/reencode_helpers_tests.cpp
   rpc_tests.cpp
   sanity_tests.cpp
   scheduler_tests.cpp
@@ -197,6 +204,14 @@ function(add_boost_test source_file)
     add_test(NAME ${test_suite_name}
       COMMAND test_bitcoin --run_test=${test_suite_name} --catch_system_error=no --log_level=test_suite -- DEBUG_LOG_OUT
     )
+
+    # Ensure script_assets_tests can find its json fixture and does not get skipped.
+    if(test_suite_name STREQUAL "script_assets_tests")
+      set_property(TEST ${test_suite_name} PROPERTY
+        ENVIRONMENT "DIR_UNIT_TEST_DATA=${CMAKE_CURRENT_SOURCE_DIR}/data"
+      )
+    endif()
+
     set_property(TEST ${test_suite_name} PROPERTY
       SKIP_REGULAR_EXPRESSION
         "no test cases matching filter"
@@ -219,5 +234,3 @@ function(add_all_test_targets)
 endfunction()
 
 add_all_test_targets()
-
-install_binary_component(test_bitcoin INTERNAL)

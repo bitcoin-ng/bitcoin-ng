@@ -9,6 +9,7 @@
 #include <script/parsing.h>
 #include <span.h>
 #include <sync.h>
+#include <test/bng/reencode_helpers.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
@@ -1482,6 +1483,14 @@ BOOST_AUTO_TEST_CASE(message_sign)
 
 BOOST_AUTO_TEST_CASE(message_verify)
 {
+    // These address literals are from upstream tests (Bitcoin mainnet). BNG intentionally changes
+    // network identity (address prefixes/HRPs), so re-encode them for the active chainparams to
+    // keep MessageVerify() behavior tests stable.
+    const std::string p2sh_addr = bng::test::ReencodeAddress("3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV").value_or("3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV");
+    const std::string p2pkh_addr_1 = bng::test::ReencodeAddress("1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm").value_or("1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm");
+    const std::string p2pkh_addr_2 = bng::test::ReencodeAddress("15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs").value_or("15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs");
+    const std::string p2pkh_addr_3 = bng::test::ReencodeAddress("11canuhp9X2NocwCq7xNrQYTmUgZAnLK3").value_or("11canuhp9X2NocwCq7xNrQYTmUgZAnLK3");
+
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "invalid address",
@@ -1491,42 +1500,42 @@ BOOST_AUTO_TEST_CASE(message_verify)
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV",
+            p2sh_addr,
             "signature should be irrelevant",
             "message too"),
         MessageVerificationResult::ERR_ADDRESS_NO_KEY);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
+            p2pkh_addr_1,
             "invalid signature, not in base64 encoding",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_MALFORMED_SIGNATURE);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
+            p2pkh_addr_1,
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
+            p2pkh_addr_2,
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
             "I never signed this"),
         MessageVerificationResult::ERR_NOT_SIGNED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
+            p2pkh_addr_2,
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
             "Trust no one"),
         MessageVerificationResult::OK);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
-            "11canuhp9X2NocwCq7xNrQYTmUgZAnLK3",
+            p2pkh_addr_3,
             "IIcaIENoYW5jZWxsb3Igb24gYnJpbmsgb2Ygc2Vjb25kIGJhaWxvdXQgZm9yIGJhbmtzIAaHRtbCeDZINyavx14=",
             "Trust me"),
         MessageVerificationResult::OK);

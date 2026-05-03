@@ -1,0 +1,9 @@
+☐ bump genesis block time to launch time
+    - Update the genesis block time to the actual launch time of BNG mainnet
+    genesis.nTime = 1769169600; // Replace with actual launch timestamp
+                                // check with `date -u -d @1769169600
+
+☐ Add real DNS seeds in chainparams
+    - Identify and add reliable DNS seed nodes for BNG mainnet
+    vSeeds.emplace_back("seed1.bng.org");
+    vSeeds.emplace_back("seed2.bng.org");

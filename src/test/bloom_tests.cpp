@@ -4,6 +4,7 @@
 
 #include <common/bloom.h>
 
+#include <base58.h>
 #include <clientversion.h>
 #include <common/system.h>
 #include <key.h>
@@ -83,7 +84,16 @@ BOOST_AUTO_TEST_CASE(bloom_create_insert_serialize_with_tweak)
 BOOST_AUTO_TEST_CASE(bloom_create_insert_key)
 {
     std::string strSecret = std::string("5Kg1gnAjaLfKiwhhPpGS3QfRg2m6awQvaj98JCZBZQ5SuS2F15C");
-    CKey key = DecodeSecret(strSecret);
+    // Avoid DecodeSecret() here as it depends on the active network's
+    // Base58 secret-key prefix (BNG vs upstream). We only need stable key bytes.
+    std::vector<unsigned char> secret_data;
+    BOOST_REQUIRE(DecodeBase58Check(strSecret, secret_data, 34));
+    BOOST_REQUIRE(secret_data.size() == 33 || (secret_data.size() == 34 && secret_data.back() == 1));
+    const bool compressed = (secret_data.size() == 34);
+    const size_t prefix_len = secret_data.size() - 32 - (compressed ? 1 : 0);
+    CKey key;
+    key.Set(secret_data.begin() + prefix_len, secret_data.begin() + prefix_len + 32, compressed);
+    BOOST_REQUIRE(key.IsValid());
     CPubKey pubkey = key.GetPubKey();
     std::vector<unsigned char> vchPubKey(pubkey.begin(), pubkey.end());
 

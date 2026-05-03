@@ -89,10 +89,11 @@ BOOST_FIXTURE_TEST_CASE(test_addnode_getaddednodeinfo_and_connection_detection, 
     auto peerman = PeerManager::make(*connman, *m_node.addrman, nullptr, *m_node.chainman, *m_node.mempool, *m_node.warnings, {});
     NodeId id{0};
     std::vector<CNode*> nodes;
+    const uint16_t default_port{Params().GetDefaultPort()};
 
     // Connect a localhost peer.
     {
-        ASSERT_DEBUG_LOG("Added connection to 127.0.0.1:8333 peer=1");
+        ASSERT_DEBUG_LOG(strprintf("Added connection to 127.0.0.1:%u peer=1", default_port));
         AddPeer(id, nodes, *peerman, *connman, ConnectionType::MANUAL, /*onion_peer=*/false, /*address=*/"127.0.0.1");
         BOOST_REQUIRE(nodes.back() != nullptr);
     }
@@ -101,7 +102,7 @@ BOOST_FIXTURE_TEST_CASE(test_addnode_getaddednodeinfo_and_connection_detection, 
     // address that resolves to multiple IPs, including that of the connected peer.
     // The connection attempt should consistently fail due to the check in ConnectNode().
     for (int i = 0; i < 10; ++i) {
-        ASSERT_DEBUG_LOG("Not opening a connection to localhost, already connected to 127.0.0.1:8333");
+        ASSERT_DEBUG_LOG(strprintf("Not opening a connection to localhost, already connected to 127.0.0.1:%u", default_port));
         BOOST_CHECK(!connman->ConnectNodePublic(*peerman, "localhost", ConnectionType::MANUAL));
     }
 
