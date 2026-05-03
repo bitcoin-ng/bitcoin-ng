@@ -607,6 +607,10 @@ SIGHASH_ALL = 1
 SIGHASH_NONE = 2
 SIGHASH_SINGLE = 3
 SIGHASH_ANYONECANPAY = 0x80
+BNG_REPLAY_PROTECTION_FORKID = 0x00474E42
+
+def ForkedSighashType(hashtype):
+    return (hashtype & 0xff) | (BNG_REPLAY_PROTECTION_FORKID << 8)
 
 def FindAndDelete(script, sig):
     """Consensus critical, see FindAndDelete() in Satoshi codebase"""
@@ -625,7 +629,7 @@ def FindAndDelete(script, sig):
         r += script[last_sop_idx:]
     return CScript(r)
 
-def LegacySignatureMsg(script, txTo, inIdx, hashtype):
+def LegacySignatureMsgOld(script, txTo, inIdx, hashtype):
     """Preimage of the signature hash, if it exists.
 
     Returns either (None, err) to indicate error (which translates to sighash 1),
@@ -672,13 +676,27 @@ def LegacySignatureMsg(script, txTo, inIdx, hashtype):
 
     return (s, None)
 
-def LegacySignatureHash(*args, **kwargs):
+def LegacySignatureMsg(*args, **kwargs):
+    msg, err = LegacySignatureMsgOld(*args, **kwargs)
+    if msg is None:
+        return (msg, err)
+    return (msg[:-4] + ForkedSighashType(kwargs.get("hashtype", args[3])).to_bytes(4, "little"), err)
+
+def LegacySignatureHashOld(*args, **kwargs):
     """Consensus-correct SignatureHash
 
     Returns (hash, err) to precisely match the consensus-critical behavior of
     the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
     """
 
+    HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    msg, err = LegacySignatureMsgOld(*args, **kwargs)
+    if msg is None:
+        return (HASH_ONE, err)
+    else:
+        return (hash256(msg), err)
+
+def LegacySignatureHash(*args, **kwargs):
     HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
     msg, err = LegacySignatureMsg(*args, **kwargs)
     if msg is None:
@@ -695,6 +713,12 @@ def sign_input_legacy(tx, input_index, input_scriptpubkey, privkey, sighash_type
     der_sig = privkey.sign_ecdsa(sighash)
     tx.vin[input_index].scriptSig = bytes(CScript([der_sig + bytes([sighash_type])])) + tx.vin[input_index].scriptSig
 
+def sign_input_legacy_old(tx, input_index, input_scriptpubkey, privkey, sighash_type=SIGHASH_ALL):
+    (sighash, err) = LegacySignatureHashOld(input_scriptpubkey, tx, input_index, sighash_type)
+    assert err is None
+    der_sig = privkey.sign_ecdsa(sighash)
+    tx.vin[input_index].scriptSig = bytes(CScript([der_sig + bytes([sighash_type])])) + tx.vin[input_index].scriptSig
+
 def sign_input_segwitv0(tx, input_index, input_scriptpubkey, input_amount, privkey, sighash_type=SIGHASH_ALL):
     """Add segwitv0 ECDSA signature for a given transaction input. Note that the signature
        is inserted at the bottom of the witness stack, i.e. additional witness data
@@ -703,11 +727,16 @@ def sign_input_segwitv0(tx, input_index, input_scriptpubkey, input_amount, privk
     der_sig = privkey.sign_ecdsa(sighash)
     tx.wit.vtxinwit[input_index].scriptWitness.stack.insert(0, der_sig + bytes([sighash_type]))
 
+def sign_input_segwitv0_old(tx, input_index, input_scriptpubkey, input_amount, privkey, sighash_type=SIGHASH_ALL):
+    sighash = SegwitV0SignatureHashOld(input_scriptpubkey, tx, input_index, sighash_type, input_amount)
+    der_sig = privkey.sign_ecdsa(sighash)
+    tx.wit.vtxinwit[input_index].scriptWitness.stack.insert(0, der_sig + bytes([sighash_type]))
+
 # TODO: Allow cached hashPrevouts/hashSequence/hashOutputs to be provided.
 # Performance optimization probably not necessary for python tests, however.
 # Note that this corresponds to sigversion == 1 in EvalScript, which is used
 # for version 0 witnesses.
-def SegwitV0SignatureMsg(script, txTo, inIdx, hashtype, amount):
+def SegwitV0SignatureMsgOld(script, txTo, inIdx, hashtype, amount):
     ZERO_HASH = bytes([0]*32)
 
     hashPrevouts = ZERO_HASH
@@ -747,6 +776,12 @@ def SegwitV0SignatureMsg(script, txTo, inIdx, hashtype, amount):
     ss += txTo.nLockTime.to_bytes(4, "little")
     ss += hashtype.to_bytes(4, "little")
     return ss
+
+def SegwitV0SignatureMsg(script, txTo, inIdx, hashtype, amount):
+    return SegwitV0SignatureMsgOld(script, txTo, inIdx, ForkedSighashType(hashtype), amount)
+
+def SegwitV0SignatureHashOld(*args, **kwargs):
+    return hash256(SegwitV0SignatureMsgOld(*args, **kwargs))
 
 def SegwitV0SignatureHash(*args, **kwargs):
     return hash256(SegwitV0SignatureMsg(*args, **kwargs))
@@ -814,7 +849,53 @@ def TaprootSignatureMsg(txTo, spent_utxos, hash_type, input_index=0, *, scriptpa
     out_type = SIGHASH_ALL if hash_type == 0 else hash_type & 3
     in_type = hash_type & SIGHASH_ANYONECANPAY
     spk = spent_utxos[input_index].scriptPubKey
-    ss = bytes([0, hash_type]) # epoch, hash_type
+    ss = bytes([0]) + BNG_REPLAY_PROTECTION_FORKID.to_bytes(4, "little") + bytes([hash_type]) # epoch, forkid, hash_type
+    ss += txTo.version.to_bytes(4, "little")
+    ss += txTo.nLockTime.to_bytes(4, "little")
+    if in_type != SIGHASH_ANYONECANPAY:
+        ss += BIP341_sha_prevouts(txTo)
+        ss += BIP341_sha_amounts(spent_utxos)
+        ss += BIP341_sha_scriptpubkeys(spent_utxos)
+        ss += BIP341_sha_sequences(txTo)
+    if out_type == SIGHASH_ALL:
+        ss += BIP341_sha_outputs(txTo)
+    spend_type = 0
+    if annex is not None:
+        spend_type |= 1
+    if scriptpath:
+        spend_type |= 2
+    ss += bytes([spend_type])
+    if in_type == SIGHASH_ANYONECANPAY:
+        ss += txTo.vin[input_index].prevout.serialize()
+        ss += spent_utxos[input_index].nValue.to_bytes(8, "little", signed=True)
+        ss += ser_string(spk)
+        ss += txTo.vin[input_index].nSequence.to_bytes(4, "little")
+    else:
+        ss += input_index.to_bytes(4, "little")
+    if (spend_type & 1):
+        ss += sha256(ser_string(annex))
+    if out_type == SIGHASH_SINGLE:
+        if input_index < len(txTo.vout):
+            ss += sha256(txTo.vout[input_index].serialize())
+        else:
+            ss += bytes(0 for _ in range(32))
+    if scriptpath:
+        ss += TaggedHash("TapLeaf", bytes([leaf_ver]) + ser_string(leaf_script))
+        ss += bytes([0])
+        ss += codeseparator_pos.to_bytes(4, "little", signed=True)
+    assert len(ss) == 179 - (in_type == SIGHASH_ANYONECANPAY) * 49 - (out_type != SIGHASH_ALL and out_type != SIGHASH_SINGLE) * 32 + (annex is not None) * 32 + scriptpath * 37
+    return ss
+
+def TaprootSignatureHash(*args, **kwargs):
+    return TaggedHash("TapSighash", TaprootSignatureMsg(*args, **kwargs))
+
+def TaprootSignatureMsgOld(txTo, spent_utxos, hash_type, input_index=0, *, scriptpath=False, leaf_script=None, codeseparator_pos=-1, annex=None, leaf_ver=LEAF_VERSION_TAPSCRIPT):
+    assert (len(txTo.vin) == len(spent_utxos))
+    assert (input_index < len(txTo.vin))
+    out_type = SIGHASH_ALL if hash_type == 0 else hash_type & 3
+    in_type = hash_type & SIGHASH_ANYONECANPAY
+    spk = spent_utxos[input_index].scriptPubKey
+    ss = bytes([0, hash_type])
     ss += txTo.version.to_bytes(4, "little")
     ss += txTo.nLockTime.to_bytes(4, "little")
     if in_type != SIGHASH_ANYONECANPAY:
@@ -851,8 +932,8 @@ def TaprootSignatureMsg(txTo, spent_utxos, hash_type, input_index=0, *, scriptpa
     assert len(ss) == 175 - (in_type == SIGHASH_ANYONECANPAY) * 49 - (out_type != SIGHASH_ALL and out_type != SIGHASH_SINGLE) * 32 + (annex is not None) * 32 + scriptpath * 37
     return ss
 
-def TaprootSignatureHash(*args, **kwargs):
-    return TaggedHash("TapSighash", TaprootSignatureMsg(*args, **kwargs))
+def TaprootSignatureHashOld(*args, **kwargs):
+    return TaggedHash("TapSighash", TaprootSignatureMsgOld(*args, **kwargs))
 
 def taproot_tree_helper(scripts):
     if len(scripts) == 0:

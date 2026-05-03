@@ -87,6 +87,7 @@ add_executable(test_bitcoin
   bng/bip324_identity_tests.cpp
   bng/network_identity_values_tests.cpp
   bng/bloom_tests.cpp
+  bng/replay_protection_tests.cpp
   bng/reencode_helpers.cpp
   bng/reencode_helpers_tests.cpp
   rpc_tests.cpp

@@ -11,6 +11,7 @@
 		- `sudo apt install -y libboost-all-dev`
 - **Multiprocess / IPC**: By default `-DENABLE_IPC=ON` and this requires Cap'n Proto.
 	- Install on Ubuntu: `sudo apt update && sudo apt install -y capnproto libcapnp-dev`
+
 ### Unix / macOS
 ```bash
 # This repository uses CMake (there is no top-level ./autogen.sh).
@@ -22,7 +23,10 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_GUI=OFF
 # cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_GUI=OFF -DENABLE_IPC=OFF
 
 # Build
-cmake --build build -j$(nproc)
+cmake --build build --parallel
+
+# If you want to set an explicit job count on macOS:
+# cmake --build build --parallel "$(sysctl -n hw.logicalcpu)"
 
 # Optional: install into a staging directory
 # cmake --install build --prefix "$PWD/stage"
@@ -42,7 +46,7 @@ See `doc/build-windows-msvc.md` (MSVC) or use `depends` (MinGW-w64 cross-compile
 ```bash
 make -C depends -j$(nproc) HOST=x86_64-w64-mingw32
 cmake -S . -B build --toolchain depends/x86_64-w64-mingw32/toolchain.cmake
-cmake --build build -j$(nproc)
+cmake --build build --parallel
 
 # Optional: create an installer (requires NSIS)
 # cmake --build build --target deploy
@@ -53,7 +57,7 @@ cmake --build build -j$(nproc)
 ### Unit Tests (C++)
 ```bash
 # Equivalent to the old `make check` flow
-ctest --test-dir build --output-on-failure -j$(nproc)
+ctest --test-dir build --output-on-failure --parallel
 
 # List tests without running
 ctest --test-dir build -N
@@ -62,7 +66,7 @@ ctest --test-dir build -N
 ctest --test-dir build -R wallet --output-on-failure
 
 # Alternative: buildsystem test target
-cmake --build build --target test -j$(nproc)
+cmake --build build --target test --parallel
 
 # OR run directly
 ./build/bin/test_bitcoin

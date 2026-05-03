@@ -2,12 +2,15 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <common/system.h>
 #include <consensus/tx_check.h>
 #include <consensus/validation.h>
 #include <hash.h>
+#include <key.h>
 #include <script/interpreter.h>
 #include <script/script.h>
+#include <script/signingprovider.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/data/sighash.json.h>
@@ -82,6 +85,146 @@ uint256 static SignatureHashOld(CScript scriptCode, const CTransaction& txTo, un
     return ss.GetHash();
 }
 
+template <class T>
+uint256 GetPrevoutsSHA256Test(const T& txTo)
+{
+    HashWriter ss{};
+    for (const auto& txin : txTo.vin) ss << txin.prevout;
+    return ss.GetSHA256();
+}
+
+template <class T>
+uint256 GetSequencesSHA256Test(const T& txTo)
+{
+    HashWriter ss{};
+    for (const auto& txin : txTo.vin) ss << txin.nSequence;
+    return ss.GetSHA256();
+}
+
+template <class T>
+uint256 GetOutputsSHA256Test(const T& txTo)
+{
+    HashWriter ss{};
+    for (const auto& txout : txTo.vout) ss << txout;
+    return ss.GetSHA256();
+}
+
+template <class T>
+uint256 SignatureHashWitnessV0Old(const CScript& scriptCode, const T& txTo, unsigned int nIn, int32_t nHashType, const CAmount& amount)
+{
+    assert(nIn < txTo.vin.size());
+
+    uint256 hashPrevouts;
+    uint256 hashSequence;
+    uint256 hashOutputs;
+
+    if (!(nHashType & SIGHASH_ANYONECANPAY)) {
+        hashPrevouts = SHA256Uint256(GetPrevoutsSHA256Test(txTo));
+    }
+
+    if (!(nHashType & SIGHASH_ANYONECANPAY) && (nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+        hashSequence = SHA256Uint256(GetSequencesSHA256Test(txTo));
+    }
+
+    if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
+        hashOutputs = SHA256Uint256(GetOutputsSHA256Test(txTo));
+    } else if ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn < txTo.vout.size()) {
+        HashWriter ss{};
+        ss << txTo.vout[nIn];
+        hashOutputs = ss.GetHash();
+    }
+
+    HashWriter ss{};
+    ss << txTo.version;
+    ss << hashPrevouts;
+    ss << hashSequence;
+    ss << txTo.vin[nIn].prevout;
+    ss << scriptCode;
+    ss << amount;
+    ss << txTo.vin[nIn].nSequence;
+    ss << hashOutputs;
+    ss << txTo.nLockTime;
+    ss << nHashType;
+    return ss.GetHash();
+}
+
+template<typename T>
+bool SignatureHashSchnorrOld(uint256& hash_out, ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache)
+{
+    uint8_t ext_flag, key_version;
+    switch (sigversion) {
+    case SigVersion::TAPROOT:
+        ext_flag = 0;
+        break;
+    case SigVersion::TAPSCRIPT:
+        ext_flag = 1;
+        key_version = 0;
+        break;
+    default:
+        assert(false);
+    }
+    assert(in_pos < tx_to.vin.size());
+    if (!(cache.m_bip341_taproot_ready && cache.m_spent_outputs_ready)) return false;
+
+    HashWriter ss{HASHER_TAPSIGHASH};
+
+    static constexpr uint8_t EPOCH = 0;
+    ss << EPOCH;
+
+    const uint8_t output_type = (hash_type == SIGHASH_DEFAULT) ? SIGHASH_ALL : (hash_type & SIGHASH_OUTPUT_MASK);
+    const uint8_t input_type = hash_type & SIGHASH_INPUT_MASK;
+    if (!(hash_type <= 0x03 || (hash_type >= 0x81 && hash_type <= 0x83))) return false;
+    ss << hash_type;
+
+    ss << tx_to.version;
+    ss << tx_to.nLockTime;
+    if (input_type != SIGHASH_ANYONECANPAY) {
+        ss << cache.m_prevouts_single_hash;
+        ss << cache.m_spent_amounts_single_hash;
+        ss << cache.m_spent_scripts_single_hash;
+        ss << cache.m_sequences_single_hash;
+    }
+    if (output_type == SIGHASH_ALL) {
+        ss << cache.m_outputs_single_hash;
+    }
+
+    assert(execdata.m_annex_init);
+    const bool have_annex = execdata.m_annex_present;
+    const uint8_t spend_type = (ext_flag << 1) + (have_annex ? 1 : 0);
+    ss << spend_type;
+    if (input_type == SIGHASH_ANYONECANPAY) {
+        ss << tx_to.vin[in_pos].prevout;
+        ss << cache.m_spent_outputs[in_pos];
+        ss << tx_to.vin[in_pos].nSequence;
+    } else {
+        ss << in_pos;
+    }
+    if (have_annex) {
+        ss << execdata.m_annex_hash;
+    }
+
+    if (output_type == SIGHASH_SINGLE) {
+        if (in_pos >= tx_to.vout.size()) return false;
+        if (!execdata.m_output_hash) {
+            HashWriter sha_single_output{};
+            sha_single_output << tx_to.vout[in_pos];
+            execdata.m_output_hash = sha_single_output.GetSHA256();
+        }
+        ss << execdata.m_output_hash.value();
+    }
+
+    if (sigversion == SigVersion::TAPSCRIPT) {
+        assert(execdata.m_tapleaf_hash_init);
+        ss << execdata.m_tapleaf_hash;
+        ss << key_version;
+        assert(execdata.m_codeseparator_pos_init);
+        ss << execdata.m_codeseparator_pos;
+    }
+
+    hash_out = ss.GetSHA256();
+    return true;
+}
+
 struct SigHashTest : BasicTestingSetup {
 void RandomScript(CScript &script) {
     static const opcodetype oplist[] = {OP_FALSE, OP_1, OP_2, OP_3, OP_CHECKSIG, OP_IF, OP_VERIF, OP_RETURN, OP_CODESEPARATOR};
@@ -147,13 +290,17 @@ BOOST_AUTO_TEST_CASE(sighash_test)
         std::cout << HexStr(scriptCode) << "\", ";
         std::cout << nIn << ", ";
         std::cout << nHashType << ", \"";
-        std::cout << sho.GetHex() << "\"]";
+        std::cout << sh.GetHex() << "\"]";
         if (i+1 != nRandomTests) {
           std::cout << ",";
         }
         std::cout << "\n";
         #endif
-        BOOST_CHECK(sh == sho);
+        if (static_cast<uint32_t>(nHashType) == ForkedSighashType(static_cast<uint8_t>(nHashType))) {
+            BOOST_CHECK_EQUAL(sh, sho);
+        } else {
+            BOOST_CHECK_NE(sh, sho);
+        }
     }
     #if defined(PRINT_SIGHASH_JSON)
     std::cout << "]\n";
@@ -246,7 +393,12 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
 
             // While here we might as well also check that the result for legacy is the same as for the old SignatureHash() function.
             if (sigversion == SigVersion::BASE) {
-                BOOST_CHECK_EQUAL(sighash_with_cache, SignatureHashOld(scriptcode, CTransaction(tx), in_index, hash_type));
+                const auto old_sighash{SignatureHashOld(scriptcode, CTransaction(tx), in_index, hash_type)};
+                if (expect_one || static_cast<uint32_t>(hash_type) == ForkedSighashType(static_cast<uint8_t>(hash_type))) {
+                    BOOST_CHECK_EQUAL(sighash_with_cache, old_sighash);
+                } else {
+                    BOOST_CHECK_NE(sighash_with_cache, old_sighash);
+                }
             }
 
             // Calling with a different scriptcode (for instance in case a CODESEP is encountered) will not return the cache value but
@@ -281,7 +433,7 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
                 BOOST_CHECK_NE(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), sighash_with_cache);
                 HashWriter h{};
                 BOOST_CHECK(cache.Load(hash_type, scriptcode, h));
-                h << hash_type;
+                h << ForkedSighashType(static_cast<uint8_t>(hash_type));
                 const auto new_hash{h.GetHash()};
                 BOOST_CHECK_EQUAL(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), new_hash);
             } else {
@@ -294,6 +446,118 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
             (void)SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache);
             BOOST_CHECK(cache.Load(hash_type, scriptcode, dummy) || expect_one);
         }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(replay_protection_rejects_bitcoin_style_signatures)
+{
+    CKey key;
+    key.MakeNewKey(/*fCompressed=*/true);
+    const CPubKey pubkey = key.GetPubKey();
+
+    {
+        CMutableTransaction tx;
+        tx.version = 2;
+        tx.vin.resize(1);
+        tx.vout.resize(1);
+        tx.vin[0].prevout.hash = Txid::FromUint256(m_rng.rand256());
+        tx.vin[0].prevout.n = 0;
+        tx.vin[0].nSequence = std::numeric_limits<uint32_t>::max();
+        tx.vout[0].nValue = 1000;
+        tx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+        const CScript prevout_script = CScript() << std::vector<unsigned char>(pubkey.begin(), pubkey.end()) << OP_CHECKSIG;
+        const uint256 old_hash = SignatureHashOld(prevout_script, CTransaction(tx), 0, SIGHASH_ALL);
+        const uint256 bng_hash = SignatureHash(prevout_script, tx, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+
+        std::vector<unsigned char> old_sig;
+        std::vector<unsigned char> bng_sig;
+        BOOST_REQUIRE(key.Sign(old_hash, old_sig));
+        BOOST_REQUIRE(key.Sign(bng_hash, bng_sig));
+        old_sig.push_back(SIGHASH_ALL);
+        bng_sig.push_back(SIGHASH_ALL);
+
+        ScriptError err;
+        tx.vin[0].scriptSig = CScript() << old_sig;
+        BOOST_CHECK(!VerifyScript(tx.vin[0].scriptSig, prevout_script, nullptr, SCRIPT_VERIFY_NONE, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::FAIL}, &err));
+        tx.vin[0].scriptSig = CScript() << bng_sig;
+        BOOST_CHECK(VerifyScript(tx.vin[0].scriptSig, prevout_script, nullptr, SCRIPT_VERIFY_NONE, MutableTransactionSignatureChecker{&tx, 0, 0, MissingDataBehavior::FAIL}, &err));
+    }
+
+    {
+        CMutableTransaction tx;
+        tx.version = 2;
+        tx.vin.resize(1);
+        tx.vout.resize(1);
+        tx.vin[0].prevout.hash = Txid::FromUint256(m_rng.rand256());
+        tx.vin[0].prevout.n = 1;
+        tx.vin[0].nSequence = std::numeric_limits<uint32_t>::max();
+        tx.vout[0].nValue = 2000;
+        tx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+        const CAmount amount = 3000;
+        const CScript witness_script = CScript() << std::vector<unsigned char>(pubkey.begin(), pubkey.end()) << OP_CHECKSIG;
+        const CScript prevout_script = GetScriptForDestination(WitnessV0ScriptHash(witness_script));
+        const uint256 old_hash = SignatureHashWitnessV0Old(witness_script, tx, 0, SIGHASH_ALL, amount);
+        const uint256 bng_hash = SignatureHash(witness_script, tx, 0, SIGHASH_ALL, amount, SigVersion::WITNESS_V0);
+
+        std::vector<unsigned char> old_sig;
+        std::vector<unsigned char> bng_sig;
+        BOOST_REQUIRE(key.Sign(old_hash, old_sig));
+        BOOST_REQUIRE(key.Sign(bng_hash, bng_sig));
+        old_sig.push_back(SIGHASH_ALL);
+        bng_sig.push_back(SIGHASH_ALL);
+
+        ScriptError err;
+        tx.vin[0].scriptSig.clear();
+        tx.vin[0].scriptWitness.stack = {old_sig, std::vector<unsigned char>(witness_script.begin(), witness_script.end())};
+        BOOST_CHECK(!VerifyScript(tx.vin[0].scriptSig, prevout_script, &tx.vin[0].scriptWitness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, MutableTransactionSignatureChecker{&tx, 0, amount, MissingDataBehavior::FAIL}, &err));
+        tx.vin[0].scriptWitness.stack = {bng_sig, std::vector<unsigned char>(witness_script.begin(), witness_script.end())};
+        BOOST_CHECK(VerifyScript(tx.vin[0].scriptSig, prevout_script, &tx.vin[0].scriptWitness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, MutableTransactionSignatureChecker{&tx, 0, amount, MissingDataBehavior::FAIL}, &err));
+    }
+
+    {
+        CMutableTransaction tx;
+        tx.version = 2;
+        tx.vin.resize(1);
+        tx.vout.resize(1);
+        tx.vin[0].prevout.hash = Txid::FromUint256(m_rng.rand256());
+        tx.vin[0].prevout.n = 2;
+        tx.vin[0].nSequence = std::numeric_limits<uint32_t>::max();
+        tx.vout[0].nValue = 4000;
+        tx.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+        TaprootBuilder builder;
+        const XOnlyPubKey internal_pubkey{pubkey};
+        builder.Finalize(internal_pubkey);
+        const CScript prevout_script = GetScriptForDestination(builder.GetOutput());
+        const CAmount amount = 5000;
+        const uint256 merkle_root;
+        PrecomputedTransactionData txdata;
+        txdata.Init(tx, {CTxOut(amount, prevout_script)}, true);
+
+        ScriptExecutionData execdata;
+        execdata.m_annex_init = true;
+        execdata.m_annex_present = false;
+
+        uint256 old_hash;
+        uint256 bng_hash;
+        BOOST_REQUIRE(SignatureHashSchnorrOld(old_hash, execdata, tx, 0, SIGHASH_ALL, SigVersion::TAPROOT, txdata));
+        execdata.m_output_hash.reset();
+        BOOST_REQUIRE(SignatureHashSchnorr(bng_hash, execdata, tx, 0, SIGHASH_ALL, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
+
+        std::vector<unsigned char> old_sig(64);
+        std::vector<unsigned char> bng_sig(64);
+        BOOST_REQUIRE(key.SignSchnorr(old_hash, old_sig, &merkle_root, {}));
+        BOOST_REQUIRE(key.SignSchnorr(bng_hash, bng_sig, &merkle_root, {}));
+        old_sig.push_back(SIGHASH_ALL);
+        bng_sig.push_back(SIGHASH_ALL);
+
+        ScriptError err;
+        tx.vin[0].scriptWitness.stack = {old_sig};
+        BOOST_CHECK(!VerifyScript(tx.vin[0].scriptSig, prevout_script, &tx.vin[0].scriptWitness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT, MutableTransactionSignatureChecker{&tx, 0, amount, txdata, MissingDataBehavior::FAIL}, &err));
+        tx.vin[0].scriptWitness.stack = {bng_sig};
+        BOOST_CHECK(VerifyScript(tx.vin[0].scriptSig, prevout_script, &tx.vin[0].scriptWitness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT, MutableTransactionSignatureChecker{&tx, 0, amount, txdata, MissingDataBehavior::FAIL}, &err));
     }
 }
 

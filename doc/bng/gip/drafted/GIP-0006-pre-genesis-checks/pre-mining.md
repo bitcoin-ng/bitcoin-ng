@@ -1,0 +1,2 @@
+- [ ] preallocating UTXO-related state from the Bitcoin chain
+- [ ] pre-mining coins for a future BNG foundation
