@@ -16,12 +16,6 @@
 ```bash
 # This repository uses CMake (there is no top-level ./autogen.sh).
 
-# Install common build dependencies with Homebrew.
-brew install cmake boost pkgconf libevent capnp
-
-# If you don't need multiprocess support, you can omit capnp above and use
-# -DENABLE_IPC=OFF in the configure step below.
-
 # Configure (no GUI)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_GUI=OFF
 
