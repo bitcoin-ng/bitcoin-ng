@@ -101,6 +101,12 @@ void SetupCommonTestArgs(ArgsManager& argsman)
 {
     argsman.AddArg("-testdatadir", strprintf("Custom data directory (default: %s<random_string>)", fs::PathToString(fs::temp_directory_path() / TEST_DIR_PATH_ELEMENT / "")),
                    ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-ctam", "Enable CTAM-dependent unit tests that expect a local CTAM REST daemon.",
+                   ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-ctamresturl=<url>", "Base URL for the local CTAM REST daemon used by CTAM-dependent unit tests (default: http://127.0.0.1:8080/).",
+                   ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-ctamtimeoutms=<ms>", "Timeout in milliseconds for CTAM-dependent unit tests (default: 5000).",
+                   ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
 }
 
 /** Test setup failure */

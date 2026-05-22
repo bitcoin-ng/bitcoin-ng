@@ -44,27 +44,41 @@ Use `POST /crypto/cta_sha256` for the first mock implementation because it alrea
 - optional branch cloning
 - custom initial state for chaining
 
-This wrapper should be treated as a development and parity tool, not as a drop-in replacement for every `CSHA256` call site. It is appropriate for:
+For BNG, the wrapper should expose a difficulty triple rather than a single injection count:
+- energy difficulty: the inherited Bitcoin compact target used as the numeric inequality threshold
+- major CTAM difficulty: the required CTAM state size in bytes, starting at a minimum of 256 MiB
+- minor CTAM difficulty: the consensus-fixed CTA-SHA256 round injection count, set to 16  and fixed as part of BNG consensus parameters (to be coded in chainparams.cpp)
+
+While CTAM still exposes `injections` today, BNG should treat that field as the transport encoding of the minor CTAM difficulty instead of the public mining API.
+
+This wrapper should be treated as a development and parity tool, not as a drop-in replacement for every `CSHA256` call site (in the future, REST is to be upgraded to shared memory - this needs a separate GIP). It is appropriate for:
 - mining-lane experiments
+- initial BNG mining integration
 - parity tests against the Python reference in `ctam/tests/blockchain`
 - benchmarks added next to `src/bench/crypto_hash.cpp`
 
-It is not appropriate for:
+It is not appropriate for non-mining code paths such as:
 - txid hashing
 - witness/script hashing
 - wallet/address derivation
 - generic hash utility code in `src/hash.h`
 
-### 3. Keep standard SHA-256 everywhere except the CTAM mining lane
-Wire the new client into the memory-hard lane only.
+The main idea that in BNG the CTAM-backed `csha256` is a mining-specific tool, not a global replacement for all SHA-256 usage. This keeps the scope of CTAM influence narrow and allows the rest of the codebase to remain standard.
+
+
+### 3. Keep standard SHA-256 everywhere except the CTAM mining path
+BNG mining should use only `csha256`, parameterized by the three-part mining difficulty.
 
 Integration points:
 - candidate block assembly remains in `src/node/miner.cpp`
-- lane selection stays aligned with the dual-lane mining design in GIP-0003
-- standard Bitcoin SHA256d remains the energy-lane path
-- CTAM-backed hashing becomes the memory-lane path
+- the PoW-facing hash call in BNG mining becomes the CTAM-backed `csha256` path
+- standard Bitcoin SHA256d remains untouched everywhere else in the codebase
+- the difficulty triple passed into `csha256` consists of:
+  - the classic Bitcoin energy difficulty carried as the compact inequality target
+  - the major CTAM difficulty carried as a minimum retained state size, initially 256 MiB
+  - the minor CTAM difficulty carried as the consensus-fixed CTA-SHA256 round count, initially 16
 
-The first pass should therefore add a mining strategy split instead of rewriting `CSHA256` globally.
+The first pass should therefore replace the mining-specific hash call with `csha256` while still avoiding any global rewrite of `SHA256`.
 
 ### 4. Model branch lifecycle explicitly in BNG
 BNG should own the branch workflow described by the CTAM blockchain prototype:
@@ -96,7 +110,7 @@ The verification implementation can reuse the same CTAM client interface, but it
 - add CTAM-specific runtime options such as:
   - `-ctamrest=1`
   - `-ctamresturl=http://127.0.0.1:8080/`
-  - `-ctaminjections=<n>`
+  - `-ctammajorbytes=<n>`
   - `-ctamtimeoutms=<n>`
 - instantiate the CTAM client from node startup or mining context
 - add a startup probe using `GET /health`
@@ -106,9 +120,9 @@ The verification implementation can reuse the same CTAM client interface, but it
 - add parity tests against known responses
 - add a benchmark entry alongside the existing SHA-256 benchmarks in `src/bench/crypto_hash.cpp`
 
-### Phase 3. Mining-lane integration
-- add a CTAM mining strategy in `src/node/miner.cpp`
-- keep standard SHA256d untouched for non-CTAM lanes
+### Phase 3. Mining integration
+- add the CTAM-backed `csha256` mining path in `src/node/miner.cpp`
+- keep standard SHA256d untouched for non-mining code paths
 - drive branch creation, CXOR mutation, and winning-branch commit from BNG code
 - ensure branch commit happens only after local acceptance of the candidate
 
@@ -133,7 +147,7 @@ Add a BNG-side Python test that starts the CTAM server, waits on `GET /health`, 
 
 ### C++ tests to add after the Python contract is in place
 - unit tests for CTAM client request/response parsing
-- mining tests for lane selection and CTAM failure fallback
+- mining tests for difficulty-triple propagation and CTAM failure fallback
 - verifier tests for malformed CTAM responses
 
 ## Gaps Still Open

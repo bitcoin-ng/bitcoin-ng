@@ -183,6 +183,8 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   blockencodings.cpp
   blockfilter.cpp
   consensus/tx_verify.cpp
+  crypto/ctam_client.cpp
+  crypto/ctam_sha256.cpp
   dbwrapper.cpp
   deploymentstatus.cpp
   flatfile.cpp

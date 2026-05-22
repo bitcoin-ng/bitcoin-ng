@@ -36,6 +36,7 @@ add_executable(test_bitcoin
   compilerbug_tests.cpp
   compress_tests.cpp
   crypto_tests.cpp
+  bng/ctam_rest_client_tests.cpp
   cuckoocache_tests.cpp
   dbwrapper_tests.cpp
   denialofservice_tests.cpp
@@ -216,6 +217,7 @@ function(add_boost_test source_file)
     set_property(TEST ${test_suite_name} PROPERTY
       SKIP_REGULAR_EXPRESSION
         "no test cases matching filter"
+        "skipping ctam_rest_client_tests"
         "skipping script_assets_test"
         "skipping total_ram"
     )

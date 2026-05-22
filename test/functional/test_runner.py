@@ -448,11 +448,6 @@ def main():
 
     enable_bitcoind = config["components"].getboolean("ENABLE_BITCOIND")
 
-    if not enable_bitcoind:
-        print("No functional tests to run.")
-        print("Re-compile with the -DBUILD_DAEMON=ON build option")
-        sys.exit(1)
-
     # Build list of tests
     test_list = []
     if tests:
@@ -509,6 +504,11 @@ def main():
 
     if args.filter:
         test_list = list(filter(re.compile(args.filter).search, test_list))
+
+    if not enable_bitcoind:
+        print("No functional tests to run.")
+        print("Re-compile with the -DBUILD_DAEMON=ON build option")
+        sys.exit(1)
 
     if not test_list:
         print("No valid test scripts specified. Check that your test is in one "
