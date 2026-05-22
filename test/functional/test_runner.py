@@ -167,6 +167,7 @@ BASE_SCRIPTS = [
     'rpc_invalid_address_message.py',
     'rpc_validateaddress.py',
     'interface_bitcoin_cli.py',
+    'interface_ctam_rest_mining.py',
     'feature_bind_extra.py',
     'mempool_resurrect.py',
     'wallet_txn_doublespend.py --mineblock',

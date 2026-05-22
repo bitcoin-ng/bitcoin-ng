@@ -30,3 +30,4 @@ target/
 Testing/**
 
 tmp/**
+test/config.ini
