@@ -22,7 +22,8 @@ struct CTAMClientOptions {
 };
 
 struct CTAMDifficultyTriple {
-    static constexpr uint32_t DEFAULT_MAJOR_CONTEXT_SIZE{16};
+    static constexpr uint32_t MIN_MAJOR_CONTEXT_SIZE{27};
+    static constexpr uint32_t DEFAULT_MAJOR_CONTEXT_SIZE{MIN_MAJOR_CONTEXT_SIZE};
     static constexpr uint8_t CONSENSUS_MINOR_ROUNDS{16};
     static constexpr uint8_t MAX_MINOR_ROUNDS{64};
 

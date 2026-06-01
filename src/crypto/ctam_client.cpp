@@ -131,6 +131,9 @@ void ValidateDifficultyTriple(const CTAMDifficultyTriple& difficulty)
     if (difficulty.energy_difficulty_bits == 0) {
         throw std::runtime_error("CTAM energy difficulty bits must be non-zero");
     }
+    if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        throw std::runtime_error("CTAM major difficulty must be at least context_size 27 (~16 MiB)");
+    }
     if (difficulty.minor_rounds != CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS) {
         throw std::runtime_error("CTAM minor difficulty must match the consensus round count");
     }

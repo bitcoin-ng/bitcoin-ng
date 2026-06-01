@@ -61,6 +61,12 @@ BOOST_AUTO_TEST_CASE(csha256_smoke)
     BOOST_CHECK_EQUAL(health["test"].get_str(), "ok");
     BOOST_REQUIRE_MESSAGE(health.exists("context_size") && health["context_size"].isNum(), "CTAM health response is missing the context_size field");
     const auto context_size = static_cast<uint32_t>(health["context_size"].getInt<int64_t>());
+    if (context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        BOOST_TEST_MESSAGE("skipping ctam_rest_client_tests: local CTAM context_size " + std::to_string(context_size) +
+                           " is below the BNG minimum of " + std::to_string(CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) +
+                           " (~16 MiB)");
+        return;
+    }
 
     const std::string message{"ctam csha256 smoke"};
     const auto difficulty = GetTestDifficulty(context_size);

@@ -14,6 +14,7 @@ GIP-0004 implementation changes so far
    - energy difficulty: classic Bitcoin compact target bits
    - major CTAM difficulty: the expected CTAM `context_size` exponent
    - minor CTAM difficulty: consensus-fixed CTA-SHA256 rounds, currently fixed to 16
+   - BNG now treats `context_size = 27` (~16 MiB) as the initial lower bound for the major CTAM difficulty, replacing the older byte-based floor wording.
 
 4. Kept CTAM transport compatibility by mapping the BNG minor CTAM difficulty onto CTAM's current `injections` request field.
    - BNG also sends energy and major difficulty fields in the request payload.

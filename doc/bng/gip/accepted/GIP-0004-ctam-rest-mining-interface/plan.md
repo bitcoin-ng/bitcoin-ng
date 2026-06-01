@@ -46,7 +46,7 @@ Use `POST /crypto/cta_sha256` for the first mock implementation because it alrea
 
 For BNG, the wrapper should expose a difficulty triple rather than a single injection count:
 - energy difficulty: the inherited Bitcoin compact target used as the numeric inequality threshold
-- major CTAM difficulty: the required CTAM state size in bytes, starting at a minimum of 256 MiB
+- major CTAM difficulty: the expected CTAM `context_size` exponent, with an initial floor of `27` (about 16 MiB of state, which stays above the current CTAM-side note of roughly 12.5 MiB)
 - minor CTAM difficulty: the consensus-fixed CTA-SHA256 round injection count, set to 16  and fixed as part of BNG consensus parameters (to be coded in chainparams.cpp)
 
 While CTAM still exposes `injections` today, BNG should treat that field as the transport encoding of the minor CTAM difficulty instead of the public mining API.
@@ -75,7 +75,7 @@ Integration points:
 - standard Bitcoin SHA256d remains untouched everywhere else in the codebase
 - the difficulty triple passed into `csha256` consists of:
   - the classic Bitcoin energy difficulty carried as the compact inequality target
-  - the major CTAM difficulty carried as a minimum retained state size, initially 256 MiB
+  - the major CTAM difficulty carried as the active CTAM `context_size` exponent, with an initial floor of `27` (~16 MiB)
   - the minor CTAM difficulty carried as the consensus-fixed CTA-SHA256 round count, initially 16
 
 The first pass should therefore replace the mining-specific hash call with `csha256` while still avoiding any global rewrite of `SHA256`.
@@ -110,7 +110,7 @@ The verification implementation can reuse the same CTAM client interface, but it
 - add CTAM-specific runtime options such as:
   - `-ctamrest=1`
   - `-ctamresturl=http://127.0.0.1:8080/`
-  - `-ctammajorbytes=<n>`
+  - `-ctammajorcontextsize=<n>`
   - `-ctamtimeoutms=<n>`
 - instantiate the CTAM client from node startup or mining context
 - add a startup probe using `GET /health`

@@ -39,7 +39,7 @@ These are the current BNG-side wrapper inputs for the smoke test, not fully enfo
 
 - message: `"ctam csha256 smoke"`
 - energy difficulty bits: `0x1d00ffff`
-- major CTAM difficulty: the live CTAM `context_size` reported by `GET /health`
+- major CTAM difficulty: the live CTAM `context_size` reported by `GET /health`, provided it is at least `27` (~16 MiB)
 - minor CTAM difficulty: `16` rounds
 
 Current implementation status:
@@ -50,6 +50,7 @@ Current implementation status:
 - On `POST /crypto/cta_sha256`, only the minor CTAM difficulty currently affects hashing behavior; it is resolved through the existing injections path.
 - On `POST /crypto/mine_csha256`, the energy difficulty is also used to drive nonce enumeration against the compact target.
 - The major CTAM difficulty is now checked against CTAM's live `context_size`, so the smoke test derives it from the health response before hashing.
+- BNG also enforces a local floor of `context_size = 27` (~16 MiB); if the local CTAM daemon reports a smaller context size, the smoke test skips with an explanatory message.
 
 ## Expected Runner Output
 

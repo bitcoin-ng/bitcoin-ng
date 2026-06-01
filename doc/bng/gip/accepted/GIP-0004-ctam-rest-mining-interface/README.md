@@ -39,6 +39,8 @@ An initial implementation should be able to:
 - receive candidate results back from CTAM
 - fail cleanly if the CTAM service is unavailable or returns invalid data
 
+For the current prototype, BNG expresses the major CTAM difficulty as the expected CTAM `context_size` exponent, not as a raw byte count. The initial lower bound should be `context_size = 27`, which corresponds to about 16 MiB of CTAM state and keeps the floor above the current CTAM-side note of roughly 12.5 MiB.
+
 ## Backwards Compatibility
 - Nodes that do not enable CTAM REST integration continue using the existing mining path.
 - This proposal is compatible with an incremental rollout where the REST path is introduced first on development networks.
@@ -77,3 +79,4 @@ Initial coverage should include:
 ## Changelog
 - 2026-03-23: drafted
 - 2026-03-23: accepted
+- 2026-05-22: clarified that major CTAM difficulty is a `context_size` exponent with an initial floor of 27 (~16 MiB)
