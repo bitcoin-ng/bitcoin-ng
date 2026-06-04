@@ -12,6 +12,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 class UniValue;
@@ -37,10 +38,32 @@ class CtamRestClient
 public:
     static constexpr std::size_t OUTPUT_SIZE{32};
 
+    struct MineResult {
+        bool found;
+        std::optional<std::array<unsigned char, OUTPUT_SIZE>> digest;
+        uint32_t branch_key;
+        bool branch_kept;
+        std::optional<uint32_t> winning_nonce;
+        uint32_t nonce_start;
+        uint32_t nonce_end;
+        uint32_t nonce_offset;
+        uint64_t attempts;
+        unsigned int energy_difficulty_bits;
+        uint32_t major_context_size;
+        uint8_t minor_rounds;
+    };
+
     explicit CtamRestClient(const CTAMClientOptions& options);
 
     UniValue Health() const;
     std::array<unsigned char, OUTPUT_SIZE> CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
+    MineResult MineCSHA256(std::span<const unsigned char> work_bytes,
+                           uint32_t nonce_offset,
+                           uint32_t nonce_start,
+                           uint32_t nonce_end,
+                           const CTAMDifficultyTriple& difficulty,
+                           std::span<const unsigned char> initial_state = {},
+                           bool keep_branch = false) const;
 
 private:
     UniValue RequestJSON(enum evhttp_cmd_type method, std::string_view path, std::string_view body = {}) const;

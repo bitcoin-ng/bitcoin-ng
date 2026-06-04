@@ -6,6 +6,13 @@
 ## Abstract
 This GIP proposes integrating BNG mining with CTAM over a REST API. The near-term goal is to let the node talk to a local CTAM webservice, likely in a Docker Compose setup, without freezing the final request or response model too early.
 
+Companion notes in this directory:
+
+- [consensus.md](consensus.md) - consensus-side implementation plan for the memory lane
+- [plan.md](plan.md) - implementation sequencing and code ownership
+- [protocol-extension.md](protocol-extension.md) - REST workflow, resize, and stale-work handling
+- [tests.md](tests.md) - targeted validation guidance
+
 ## Motivation
 CTAM already has some API surface, but not yet a mining-job oriented interface. BNG wants to move in that direction while keeping the proposal open enough for CTAM's existing API and deployment model to evolve.
 

@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -231,5 +232,105 @@ std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CtamRestClient::CTA_SHA25
 
     std::array<unsigned char, OUTPUT_SIZE> result;
     std::copy(digest->begin(), digest->end(), result.begin());
+    return result;
+}
+
+CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned char> work_bytes,
+                                                       uint32_t nonce_offset,
+                                                       uint32_t nonce_start,
+                                                       uint32_t nonce_end,
+                                                       const CTAMDifficultyTriple& difficulty,
+                                                       std::span<const unsigned char> initial_state,
+                                                       bool keep_branch) const
+{
+    ValidateDifficultyTriple(difficulty);
+
+    if (work_bytes.empty()) {
+        throw std::runtime_error("CTAM mining requires non-empty work bytes");
+    }
+    if (initial_state.size() != 0 && initial_state.size() != OUTPUT_SIZE) {
+        throw std::runtime_error("CTAM mining initial state must be empty or exactly 32 bytes");
+    }
+    if (nonce_offset > work_bytes.size() - sizeof(uint32_t)) {
+        throw std::runtime_error("CTAM mining nonce offset must leave room for 4 nonce bytes inside the supplied work bytes");
+    }
+    if (nonce_end < nonce_start) {
+        throw std::runtime_error("CTAM mining nonce_end must be greater than or equal to nonce_start");
+    }
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
+    payload.pushKV("nonce_offset", nonce_offset);
+    payload.pushKV("nonce_start", nonce_start);
+    payload.pushKV("nonce_end", nonce_end);
+    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
+    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
+    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
+    payload.pushKV("injections", difficulty.minor_rounds);
+    payload.pushKV("keep_branch", keep_branch);
+    if (!initial_state.empty()) {
+        payload.pushKV("initial_state_hex", HexStr(initial_state));
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/mine_csha256", payload.write());
+    if (!response.exists("found") || !response["found"].isBool()) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 did not return found");
+    }
+    if (!response.exists("branch_key") || !response["branch_key"].isNum()) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 did not return branch_key");
+    }
+    if (!response.exists("branch_kept") || !response["branch_kept"].isBool()) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 did not return branch_kept");
+    }
+    if (!response.exists("attempts") || !response["attempts"].isNum()) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 did not return attempts");
+    }
+
+    MineResult result{
+        .found = response["found"].get_bool(),
+        .digest = std::nullopt,
+        .branch_key = static_cast<uint32_t>(response["branch_key"].getInt<int64_t>()),
+        .branch_kept = response["branch_kept"].get_bool(),
+        .winning_nonce = std::nullopt,
+        .nonce_start = nonce_start,
+        .nonce_end = nonce_end,
+        .nonce_offset = nonce_offset,
+        .attempts = static_cast<uint64_t>(response["attempts"].getInt<int64_t>()),
+        .energy_difficulty_bits = difficulty.energy_difficulty_bits,
+        .major_context_size = difficulty.major_context_size,
+        .minor_rounds = difficulty.minor_rounds,
+    };
+
+    if (response.exists("digest_hex") && !response["digest_hex"].isNull()) {
+        if (!response["digest_hex"].isStr()) {
+            throw std::runtime_error("CTAM /crypto/mine_csha256 returned a non-string digest_hex");
+        }
+        const auto digest = TryParseHex<unsigned char>(response["digest_hex"].get_str());
+        if (!digest || digest->size() != OUTPUT_SIZE) {
+            throw std::runtime_error("CTAM /crypto/mine_csha256 returned an invalid digest");
+        }
+        std::array<unsigned char, OUTPUT_SIZE> digest_array;
+        std::copy(digest->begin(), digest->end(), digest_array.begin());
+        result.digest = digest_array;
+    }
+
+    if (response.exists("winning_nonce") && !response["winning_nonce"].isNull()) {
+        if (!response["winning_nonce"].isNum()) {
+            throw std::runtime_error("CTAM /crypto/mine_csha256 returned a non-numeric winning_nonce");
+        }
+        const int64_t winning_nonce = response["winning_nonce"].getInt<int64_t>();
+        if (winning_nonce < 0 || winning_nonce > std::numeric_limits<uint32_t>::max()) {
+            throw std::runtime_error("CTAM /crypto/mine_csha256 returned an out-of-range winning_nonce");
+        }
+        result.winning_nonce = static_cast<uint32_t>(winning_nonce);
+    }
+
+    if (result.found && (!result.digest.has_value() || !result.winning_nonce.has_value())) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 reported a solution without digest or winning_nonce");
+    }
+    if (!result.found && (result.digest.has_value() || result.winning_nonce.has_value())) {
+        throw std::runtime_error("CTAM /crypto/mine_csha256 reported no solution but returned solution fields");
+    }
+
     return result;
 }
