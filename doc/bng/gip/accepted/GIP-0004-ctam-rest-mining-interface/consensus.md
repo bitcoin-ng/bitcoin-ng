@@ -1,12 +1,13 @@
 # Consensus Integration Plan
 
-This note extends BNG-0004 with the consensus-side implementation plan for the first CTAM-backed memory-lane prototype.
+This note extends GIP-0004 with the consensus-side implementation plan for the first CTAM-backed memory-lane prototype.
 [protocol-extension.md](protocol-extension.md) covers REST lifecycle and resize coordination.
 [plan.md](plan.md) covers the general implementation direction.
 This document focuses on the consensus-owned changes needed to make memory-lane mining and validation real:
 
 - header fields and serialization
 - lane selection
+- CTAM state bootstrap and fast-forward
 - mining from node-owned block templates
 - CTAM-backed validation for memory-lane blocks
 
@@ -128,38 +129,50 @@ Important constraints:
 
 ## How the current CTAM mining API fits the first prototype
 
-The first prototype should use the existing CTAM mining endpoint:
+The first prototype should use CTAM's job-oriented mining API:
 
-- `POST /crypto/mine_csha256`
+- `GET /mining`
+- `POST /mining`
+- `GET /mining/{job_id}`
+- `POST /mining/{job_id}/stop`
 
-That endpoint already performs the nonce-search mechanism on the CTAM server side, so the first consensus prototype does not require CTAM to grow a new dedicated header-mining API before work can begin.
+This server-side shape is documented in `ctam/doc/api/07-mining.md`.
+It replaces long blocking HTTP requests with a start/poll/stop worker model, while keeping `POST /crypto/mine_csha256` available only as a synchronous compatibility endpoint.
 
-The activated BNG header is larger than one 64-byte compression block, so the node still needs a canonical mapping from the full header to the CTAM mining request.
+The activated BNG header may be larger than one 64-byte compression block, but the current CTAM worker accepts `work_bytes_hex` rather than a caller-managed final compression block.
+CTAM writes the nonce into those work bytes, then owns SHA-style padding and internal CTA-SHA256 block splitting.
+That means BNG should no longer precompute a chunk-1 state or translate the header into a final `block_hex` request.
+
 The intended mapping is:
 
 1. Serialize the full activated header into canonical bytes.
-2. Split those bytes into the SHA-256 compression chunks implied by CTA-SHA256.
-3. Precompute the invariant chunk-1 state inside the node.
-4. Call `POST /crypto/mine_csha256` for the final 64-byte mining chunk, passing:
-  - the canonical final chunk as `block_hex`
-  - the nonce byte offset inside that final chunk
-  - the precomputed chunk-1 state as `initial_state_hex`
+2. Identify the byte offset of `nNonce` inside those canonical bytes.
+3. Start a CTAM mining job with `POST /mining`, passing:
+  - the canonical activated header bytes as `work_bytes_hex`
+  - the nonce byte offset as `nonce_offset`
+  - the requested inclusive nonce range as `nonce_start` and `nonce_end`
   - the full header difficulty tuple as `energy_difficulty_bits`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds`
+  - `keep_branch = false` for ordinary mining unless a debug workflow explicitly needs winning-branch inspection
+4. Poll `GET /mining/{job_id}` until the job reaches `completed`, `stopped`, or `failed`.
+5. If a caller aborts mining work, request cooperative cancellation with `POST /mining/{job_id}/stop` and then poll until the terminal status is visible.
 
-This keeps the header as the consensus object while still using CTAM's current mining-oriented REST call for nonce search.
+This keeps the header as the consensus object while letting CTAM own the worker-side nonce loop, padding, and CTA-SHA256 compression-block handling.
 
-The concrete behavior already exists in `ctam/src/server/rest/crypto.rs`:
+The concrete server behavior expected by BNG is:
 
-- `post_mine_csha256(...)` iterates `nonce_start..=nonce_end`
-- it writes each nonce into the caller-supplied 64-byte block at `nonce_offset`
-- it evaluates CTA-SHA256 with the supplied `initial_state_hex`
-- it compares the resulting digest against the target derived from `energy_difficulty_bits`
-- it stops at the first winning nonce and returns `winning_nonce`, `digest_hex`, and `attempts`
+- `POST /mining` starts a job and returns immediately with a `job_id`
+- CTAM supports one running mining job at a time in the phase-1 worker
+- the worker writes each nonce little-endian into `work_bytes_hex` at `nonce_offset`
+- the worker pads and splits the resulting bytes internally before evaluating CTA-SHA256
+- the worker compares each digest against the target derived from `energy_difficulty_bits`
+- failed, stopped, and exhausted searches do not retain branches
+- only a winning branch may be retained, and only if `keep_branch` is true
+- starting a second job while one is running returns `409 Conflict`
 
-So the missing implementation is not a server-side nonce loop.
-The missing implementation is the BNG-side mapping from the canonical activated header to the request that `POST /crypto/mine_csha256` already understands.
+So the missing implementation is not a server-side nonce loop or a BNG-side compression-chunk adapter.
+The missing implementation is the BNG-side mapping from the canonical activated header to the `work_bytes_hex` request accepted by `POST /mining`, plus polling and cancellation behavior in `CtamRestClient`.
 
-The existing endpoint is therefore sufficient for the first prototype if and only if the node defines that chunk mapping deterministically and validators rebuild the same chunk-1 state from block data.
+The legacy `POST /crypto/mine_csha256` path may remain useful for compatibility tests, but new BNG mining code should treat `/mining` as the normal CTAM mining control surface.
 
 Lower-level APIs remain optional future optimizations, not blockers:
 
@@ -187,12 +200,53 @@ The node-side plan is:
 
 That same canonical byte sequence should drive:
 
-- internal node mining
+- internal node mining (is not possible in BNG without CTAM REST delegation)
 - CTAM REST delegation
-- `checkBlock()` validation
+- `checkBlock()` validation (this implies the CTAM REST call to crypto/cta_sha256 must be deterministic and locally reproducible, however the trunk and the branch must be in the correct state)
 - any later Stratum or external template provider integration
 
 This keeps the header as the single source of truth and avoids consensus drift between internal and external miners.
+
+## CTAM state bootstrap and fast-forward
+
+Mining and validation only make sense if CTAM's trunk state corresponds to the same chain prefix that the BNG node is using.
+The REST client therefore needs a startup synchronization path, not only a mining-call path.
+
+At node boot, the CTAM client should:
+
+1. Probe `GET /health` and `GET /status`.
+2. Read CTAM trunk metadata such as height, trunk key, context size, and any recorded chain or block identifier.
+3. Compare that metadata with the node's active chain target.
+4. If CTAM is behind but on the same chain prefix, fast-forward CTAM by replaying blocks in chain order.
+5. If CTAM is at the target height and metadata matches, reuse the persisted CTAM state.
+6. If CTAM is ahead, divergent, or missing comparable metadata, fail closed unless the operator explicitly allows rebuilding CTAM state from an earlier checkpoint or genesis.
+
+Fast-forward is deterministic replay of accepted blocks into CTAM state.
+In the simplest prototype, replay can start from the first genesis block if no trusted CTAM checkpoint exists.
+For each block from the CTAM trunk height plus one through the desired chain height, the client should:
+
+1. Derive the canonical CTAM replay bytes for that block from node-owned block data.
+2. Call `POST /crypto/cta_sha256` with the block's consensus difficulty tuple and `keep_branch = true`.
+3. Verify that the returned digest and branch metadata are well formed and correspond to the expected block replay input.
+4. Commit the returned branch with `POST /branches/{branch_key}/commit`.
+5. Re-read `GET /status` or local client state and record that CTAM trunk now corresponds to the replayed block height and block identifier.
+
+The branch commits must be strictly sequential in block order.
+CTAM commit semantics promote one branch to trunk and clear other branches, so the fast-forward loop must not pipeline branch commits or keep multiple replay branches live across block boundaries.
+
+The CTAM REST client should expose this as an explicit synchronization surface, for example:
+
+- `GetStatus()`
+- `CtaSha256KeepBranch(replay_input, difficulty_tuple)`
+- `CommitBranch(branch_key)`
+- `FastForwardToHeight(chain, target_height)`
+- `EnsureCtamStateAtHeight(chain, target_height)`
+
+`EnsureCtamStateAtHeight(...)` should run before memory-lane mining starts and before any validation path that depends on live CTAM state.
+It may be called again after reorgs, but reorg handling should be explicit: either rewind to a trusted CTAM snapshot/checkpoint and replay the new branch, or rebuild from genesis if no rewind support exists.
+
+This synchronization path is not a substitute for consensus validation.
+The node still validates blocks locally and treats CTAM responses as untrusted execution results, but CTAM's persisted trunk must be brought to the correct chain height before CTAM-backed mining or replay-dependent validation is used.
 
 ## Actual mining code patch plan
 
@@ -221,9 +275,10 @@ Suggested helper split:
 
 - `GenerateMemoryBlockWithCTAM(...)`
   - derives the canonical activated header bytes from the template block
-  - computes the invariant chunk-1 state
-  - prepares the final 64-byte mining chunk and nonce offset
-  - calls `CtamRestClient::MineCSHA256(...)`
+  - identifies the nonce byte offset inside those bytes
+  - starts a CTAM mining job with `CtamRestClient::StartMiningJob(...)`
+  - polls `CtamRestClient::GetMiningJob(...)` until terminal status or caller cancellation
+  - calls `CtamRestClient::StopMiningJob(...)` when the local mining request is interrupted
   - writes the winning nonce back into `block.nNonce`
   - rebuilds the final canonical header bytes
   - hands the solved block to `ProcessNewBlock(...)`
@@ -235,7 +290,7 @@ Suggested helper split:
 ### Where `ctam_client` should be instantiated
 
 The node should not construct a fresh REST client for every nonce attempt.
-The recommended ownership is one mining-scoped client per process or per mining interface instance.
+The recommended ownership is one node-scoped or mining-scoped client per process, with explicit startup synchronization before the miner uses it.
 
 Practical options:
 
@@ -247,7 +302,9 @@ For the first patch, the simplest workable plan is:
 
 1. promote `-ctamresturl` and `-ctamtimeoutms` from test-only args to normal runtime args
 2. build `CTAMClientOptions` from `ArgsManager`
-3. cache the resulting `CtamRestClient` in a mining-owned object instead of recreating it inside the hot path
+3. cache the resulting `CtamRestClient` in a node-owned or mining-owned object instead of recreating it inside the hot path
+4. call `EnsureCtamStateAtHeight(...)` during startup or before the first memory-lane mining request
+5. refuse CTAM-backed mining if fast-forward cannot prove that CTAM trunk state matches the node's active chain prefix
 
 ### How the patched memory-lane path should run
 
@@ -255,18 +312,21 @@ For a block template returned by `interfaces::Mining::createNewBlock()`:
 
 1. Read the template block and determine that the lane is `memory`.
 2. Serialize the full activated header including `nBits`, `nCtamMajor`, and `nCtamMinor`.
-3. Split the header into the CTA-SHA256 chunk layout.
-4. Compute the invariant chunk-1 state locally.
-5. Call `m_ctam_client->MineCSHA256(...)` with:
-   - the final 64-byte chunk as `block`
-   - the nonce offset inside that chunk
-   - the caller's nonce range derived from `max_tries`
+3. Identify the nonce byte offset inside the serialized header bytes.
+4. Derive the caller's inclusive nonce range from `max_tries`.
+5. Call `m_ctam_client->StartMiningJob(...)` with:
+   - the serialized activated header as `work_bytes_hex`
+   - the nonce offset inside that header
+   - the caller's nonce range as `nonce_start` and `nonce_end`
    - the `CTAMDifficultyTriple` derived from the template header
-   - `initial_state` set to the chunk-1 state
-6. If CTAM reports `found = false`, return unsolved work just like the current loop does when `max_tries` is exhausted.
-7. If CTAM reports `found = true`, copy `winning_nonce` back into `block.nNonce`.
-8. Re-run the node's own proof check over the rebuilt canonical header bytes before block submission.
-9. Submit the solved block through the existing `ProcessNewBlock(...)` path.
+   - `keep_branch = false` for normal mining
+6. Poll `m_ctam_client->GetMiningJob(job_id)` until CTAM reports a terminal status.
+7. If the local mining request is interrupted, call `m_ctam_client->StopMiningJob(job_id)` and return cleanly after observing the stopped state or timing out.
+8. If CTAM reports `status = completed` and `found = false`, return unsolved work just like the current loop does when `max_tries` is exhausted.
+9. If CTAM reports `status = completed` and `found = true`, copy `winning_nonce` back into `block.nNonce`.
+10. Treat `failed`, malformed responses, wrong tuple echoes, or unexpected job ids as mining failures.
+11. Re-run the node's own proof check over the rebuilt canonical header bytes before block submission.
+12. Submit the solved block through the existing `ProcessNewBlock(...)` path.
 
 This keeps the node as the consensus owner while making CTAM the nonce-search worker for BNG consensus blocks.
 
@@ -276,12 +336,22 @@ This keeps the node as the consensus owner while making CTAM the nonce-search wo
   - replace the normal BNG nonce loop with a CTAM-backed helper
   - keep any SHA256d loop only behind an explicit legacy test-mode path
 
+- `src/crypto/ctam_client.{h,cpp}` or the chosen CTAM client surface
+  - add `StartMiningJob`, `GetMiningJob`, and `StopMiningJob` methods for `/mining`
+  - add status, CTA-SHA256-with-kept-branch, branch commit, and fast-forward helpers
+  - keep any `MineCSHA256` compatibility wrapper separate from the normal worker path
+
 - `src/node/interfaces.cpp`
-  - optionally cache the mining-scoped `CtamRestClient`
+  - optionally cache the node-scoped or mining-scoped `CtamRestClient`
+  - trigger CTAM state synchronization before memory-lane mining is exposed
   - keep `createNewBlock()` as the template source of truth
 
 - `src/node/context.h`
-  - if `NodeContext` owns the cached client or CTAM mining configuration
+  - if `NodeContext` owns the cached client, CTAM mining configuration, or CTAM sync metadata
+
+- block index or chainstate access surfaces used by startup
+  - provide ordered block replay input for `FastForwardToHeight(...)`
+  - provide a target height and block identifier for CTAM status comparison
 
 - `src/common/args.cpp` or the relevant init argument registration surface
   - register production `-ctamresturl` and `-ctamtimeoutms` args for node mining, not just tests
@@ -370,6 +440,22 @@ Changes:
 - keep `submitSolution()` anchored to template-owned difficulty fields
 - ensure the internal mining loop switches algorithm by lane
 
+### CTAM REST client and state synchronization
+
+- `src/crypto/ctam_client.h`
+- `src/crypto/ctam_client.cpp`
+- `src/node/context.h`
+- node startup or chainstate initialization code that owns CTAM readiness
+
+Changes:
+
+- add REST wrappers for `GET /status`, `POST /crypto/cta_sha256`, and `POST /branches/{key}/commit`
+- add `FastForwardToHeight(...)` and `EnsureCtamStateAtHeight(...)`
+- compare CTAM trunk metadata with the node's active chain before mining starts
+- replay blocks sequentially, keeping and committing exactly one branch per block
+- support replay from genesis when CTAM has no usable checkpoint
+- fail closed on divergent CTAM metadata unless an explicit rebuild/reset path is selected
+
 ### Consensus and proof checks
 
 - `src/pow.h`
@@ -411,6 +497,15 @@ Changes:
 
 ## Recommended implementation sequence
 
+### Phase 0. CTAM client bootstrap and fast-forward
+
+- add status and branch-commit wrappers to `CtamRestClient`
+- add a kept-branch `cta_sha256` replay helper
+- implement `EnsureCtamStateAtHeight(...)` for startup synchronization
+- replay blocks sequentially until CTAM reaches the node's desired chain height
+- support replay from genesis as the baseline recovery path
+- block CTAM-backed mining until synchronization succeeds
+
 ### Phase 1. Activated header shape
 
 - add `nCtamMajor` and `nCtamMinor` to the header behind a regtest or feature flag
@@ -437,7 +532,9 @@ Changes:
 
 ### Phase 5. CTAM worker integration
 
-- upgrade CTAM execution support so delegated mining operates on the canonical activated header bytes
+- call CTAM's `/mining` worker API with canonical activated header bytes as `work_bytes_hex`
+- poll mining jobs until `completed`, `stopped`, or `failed`
+- request cooperative stop when local mining work is interrupted
 - ensure the node can rebuild the exact same work locally for validation
 - keep CTAM REST optional for mining, never optional for validation correctness
 
@@ -452,12 +549,14 @@ Minimum coverage for this work should include:
 - memory-lane tests confirming `csha256` is used only on memory-lane blocks
 - rejection tests for wrong `nCtamMajor`, wrong `nCtamMinor`, wrong lane, and wrong hash
 - template tests proving external miners get the same canonical bytes as the internal mining path
-- regtest functional tests mining across an odd/even boundary and validating both acceptance and rejection behavior
+- startup sync tests where CTAM is already at target height, behind and fast-forwarded, empty and rebuilt from genesis, and divergent
+- fast-forward tests proving exactly one kept branch is committed per replayed block and commits occur in block order
 
 ## First-prototype decisions
 
 - the first consensus prototype lands directly with an in-process verifier in BNG; CTAM REST is used for mining-side `csha256` execution, not as an external consensus oracle (think of it as a miner-side library call rather than a yes/no verdict from an out-of-process service)
-- the first nonce-search implementation uses CTAM's existing `POST /crypto/mine_csha256`; that endpoint already does server-side nonce enumeration over a caller-supplied 64-byte block plus optional initial state, so the missing work is the BNG-side header-to-request mapping rather than a new CTAM search primitive
+- CTAM-backed mining starts only after the REST client has synchronized CTAM trunk state to the node's desired chain height; if no persisted CTAM checkpoint is usable, the baseline recovery path is replay from genesis
+- the first nonce-search implementation uses CTAM's `/mining` job API; CTAM already owns nonce enumeration, padding, and internal CTA-SHA256 block splitting over caller-supplied `work_bytes_hex`, so the missing work is the BNG-side header-to-work mapping plus job polling and cancellation
 - the inherited SHA256d mining loop is retained only as temporary Bitcoin Core compatibility scaffolding and should not be documented as an enduring BNG consensus lane
 
 ## Summary
