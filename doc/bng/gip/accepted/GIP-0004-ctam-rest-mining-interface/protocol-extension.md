@@ -4,7 +4,7 @@ This document extends BNG-0004 with an end-to-end control flow for CTAM-backed m
 It focuses on the admin-side coordination needed to move CTAM between major-difficulty epochs while keeping mining requests simple and strictly validated.
 
 This is intentionally a transport and workflow note, not the final consensus specification.
-The rule that decides when the major CTAM difficulty grows or shrinks, and the rule that defines the seed material for those transitions, belongs in BNG-0003.
+The rule that decides when the major CTAM difficulty grows or shrinks, and any block-level commitment that identifies a resize transition, belongs in BNG-0003.
 
 ## Scope
 
@@ -88,11 +88,12 @@ For a grow event from `old_context_size` to `new_context_size` where `new_contex
 4. If the final copy would exceed the target size, CTAM truncates the last copy to fit exactly.
 5. CTAM persists the new state before accepting mining work for the new difficulty.
 
-The 16 MiB transition blob should come from a predefined and pre-agreed random file that is part of BNG consensus.
-Nodes and CTAM instances should verify that file by its SHA256 digest before using it for a grow event.
+The 16 MiB transition blob is the consensus-defined `minranseed.blob` from BNG-0003.
+Nodes and CTAM instances should verify that local file against the pinned SHA256 digest `b3f09ab7f70f41be49037cb9bf9901ce45066e66b59e2590e5bb06d74edf63e1` before using it for a grow event.
+Reference deployments may ship the companion checksum artifact `minranseed.blob.sha256` alongside the blob.
 It cannot be process-local randomness if nodes are expected to replay the same resize history during validation or offline verification.
 On the CTAM deployment side, `config.toml` should point at the local `minranseed.blob` copy that provides this seed material for grow operations.
-The exact file identifier, SHA256 commitment, and consensus rule that selects it belong in BNG-0003 rather than in this transport note.
+The consensus schedule that decides when that blob is applied still belongs in BNG-0003 rather than in this transport note.
 
 The node does not perform the copy itself, but it must know that the grow event happened.
 While CTAM is still reporting the old `context_size`, the node must treat the resize as in progress and keep memory-lane work paused.
@@ -138,6 +139,5 @@ This document only proposes how the node and CTAM coordinate a difficulty transi
 The following items should be finalized in BNG-0003:
 
 - the consensus schedule that decides when major CTAM difficulty grows or shrinks
-- the consensus-defined random file and SHA256 commitment used as the 16 MiB transition blob during growth
 - any header commitment, witness commitment, or block-level identifier for the transition
 - how validators replay the same resize history during block verification and reorg handling

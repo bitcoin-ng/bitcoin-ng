@@ -67,6 +67,16 @@ On even-numbered weeks:
 
 The exact CTAM proof encoding, witness placement, and verifier algorithm are part of the same consensus change and must be specified before this GIP moves from drafted to accepted.
 
+For any consensus-triggered grow event where the major CTAM difficulty increases:
+
+- the transition blob identifier is `minranseed.blob`
+- the transition blob size is fixed at 16 MiB (`16777216` bytes, `2^27` bits)
+- the consensus SHA256 digest of that blob is `b3f09ab7f70f41be49037cb9bf9901ce45066e66b59e2590e5bb06d74edf63e1`
+- implementations MAY store the blob at any local path, but the bytes fed into CTAM grow logic MUST hash to that digest
+- CTAM fills the newly exposed address range by repeated whole-slice copies of that blob and truncates only the final copy if needed to fit exactly
+
+Reference deployments SHOULD also publish a companion checksum file named `minranseed.blob.sha256` that contains the standard checksum line for the consensus blob.
+
 ### 5. Difficulty adjustment cadence
 The two lanes adjust independently.
 
