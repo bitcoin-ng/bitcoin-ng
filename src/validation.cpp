@@ -11,12 +11,16 @@
 #include <chain.h>
 #include <checkqueue.h>
 #include <clientversion.h>
+#include <common/args.h>
+#include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <consensus/tx_check.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include <crypto/ctam_client.h>
+#include <crypto/ctam_mining.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
 #include <hash.h>
@@ -49,6 +53,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <undo.h>
+#include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
@@ -87,6 +92,53 @@ using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
+
+namespace {
+
+constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
+
+bool CtamPowValidationEnabled()
+{
+    return gArgs.GetBoolArg("-ctammining", true);
+}
+
+CTAMClientOptions GetCTAMClientOptions()
+{
+    return {
+        .base_url = gArgs.GetArg("-ctamresturl", "http://127.0.0.1:8080/"),
+        .timeout_ms = static_cast<int>(gArgs.GetIntArg("-ctamtimeoutms", DEFAULT_CTAM_TIMEOUT_MS)),
+    };
+}
+
+std::optional<uint32_t> GetCtamContextSize(CtamRestClient& client)
+{
+    return client.Status().context_size;
+}
+
+bool CheckCtamProofOfWork(const CBlockHeader& block)
+{
+    try {
+        CtamRestClient client{GetCTAMClientOptions()};
+        const auto context_size = GetCtamContextSize(client);
+        if (!context_size) {
+            return false;
+        }
+        const CTAMDifficultyTriple difficulty{
+            .energy_difficulty_bits = block.nBits,
+            .major_context_size = *context_size,
+            .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        };
+        client.EnsureReadyForMining(difficulty);
+        const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(block);
+        const auto result = client.MineCSHA256(work.work_bytes, work.nonce_offset, block.nNonce, block.nNonce, difficulty);
+        return result.found && result.winning_nonce && *result.winning_nonce == block.nNonce;
+    } catch (const std::exception& e) {
+        LogWarning("CTAM proof-of-work validation failed: %s\n", e.what());
+        return false;
+    }
+}
+
+} // namespace
 
 /** Size threshold for warning about slow UTXO set flush to disk. */
 static constexpr size_t WARN_FLUSH_COINS_SIZE = 1 << 30; // 1 GiB
@@ -3924,8 +3976,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    if (fCheckPOW) {
+        const bool valid_pow = CtamPowValidationEnabled() ? CheckCtamProofOfWork(block) : CheckProofOfWork(block.GetHash(), block.nBits, consensusParams);
+        if (!valid_pow) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+        }
+    }
 
     return true;
 }

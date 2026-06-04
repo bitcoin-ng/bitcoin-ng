@@ -15,8 +15,10 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -83,6 +85,41 @@ BOOST_AUTO_TEST_CASE(csha256_smoke)
     csha256.Finalize(wrapped_digest.data());
 
     BOOST_CHECK(std::equal(direct_digest.begin(), direct_digest.end(), wrapped_digest.begin()));
+}
+
+BOOST_AUTO_TEST_CASE(status_and_kept_branch_commit_smoke)
+{
+    if (!CTAMTestsEnabled()) {
+        BOOST_TEST_MESSAGE("skipping ctam_rest_client_tests: rerun with -- -ctam=1 and a local CTAM daemon");
+        return;
+    }
+
+    CtamRestClient client{GetCTAMClientOptions()};
+
+    const auto status = client.Status();
+    BOOST_CHECK_EQUAL(status.status, "running");
+    if (status.context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        BOOST_TEST_MESSAGE("skipping ctam_rest_client_tests: local CTAM context_size " + std::to_string(status.context_size) +
+                           " is below the BNG minimum of " + std::to_string(CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) +
+                           " (~16 MiB)");
+        return;
+    }
+
+    const std::string message{"ctam kept branch replay smoke"};
+    const auto difficulty = GetTestDifficulty(status.context_size);
+    const auto replay = client.CtaSha256KeepBranch(MakeUCharSpan(message), difficulty);
+
+    BOOST_CHECK(std::any_of(replay.digest.begin(), replay.digest.end(), [](unsigned char byte) { return byte != 0; }));
+    BOOST_CHECK_GT(replay.branch_key, 0U);
+    BOOST_CHECK(replay.branch_kept);
+    BOOST_CHECK_EQUAL(replay.injections, difficulty.minor_rounds);
+
+    const auto commit = client.CommitBranch(replay.branch_key);
+    BOOST_CHECK_EQUAL(commit.status, "committed");
+
+    const auto committed_status = client.Status();
+    BOOST_CHECK_EQUAL(committed_status.trunk_key, replay.branch_key);
+    BOOST_CHECK_EQUAL(committed_status.branch_count, 0U);
 }
 
 BOOST_AUTO_TEST_CASE(csha256_mining_smoke)
@@ -174,6 +211,68 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
     BOOST_CHECK_EQUAL(result.nonce_offset, 76U);
     BOOST_CHECK_GT(result.attempts, 0U);
     BOOST_CHECK(std::any_of(result.digest->begin(), result.digest->end(), [](unsigned char byte) { return byte != 0; }));
+}
+
+BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
+{
+    if (!CTAMTestsEnabled()) {
+        BOOST_TEST_MESSAGE("skipping ctam_rest_client_tests: rerun with -- -ctam=1 and a local CTAM daemon");
+        return;
+    }
+
+    CtamRestClient client{GetCTAMClientOptions()};
+
+    const UniValue health = client.Health();
+    BOOST_REQUIRE_MESSAGE(health.exists("context_size") && health["context_size"].isNum(), "CTAM health response is missing the context_size field");
+    const auto context_size = static_cast<uint32_t>(health["context_size"].getInt<int64_t>());
+    if (context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        BOOST_TEST_MESSAGE("skipping ctam_rest_client_tests: local CTAM context_size " + std::to_string(context_size) +
+                           " is below the BNG minimum of " + std::to_string(CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) +
+                           " (~16 MiB)");
+        return;
+    }
+
+    const CTAMDifficultyTriple difficulty{
+        .energy_difficulty_bits = EASY_ENERGY_DIFFICULTY_BITS,
+        .major_context_size = context_size,
+        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+    };
+
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.nTime = 1'700'000'000;
+    header.nBits = difficulty.energy_difficulty_bits;
+    header.nNonce = 0;
+
+    const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(header);
+    const auto started = client.StartMiningJob(work.work_bytes,
+                                               work.nonce_offset,
+                                               /*nonce_start=*/0,
+                                               /*nonce_end=*/4095,
+                                               difficulty);
+
+    BOOST_CHECK(!started.job_id.empty());
+    BOOST_CHECK_EQUAL(started.status, "running");
+    BOOST_CHECK(!started.IsTerminal());
+    BOOST_CHECK_EQUAL(started.nonce_offset, work.nonce_offset);
+    BOOST_CHECK_EQUAL(started.energy_difficulty_bits, difficulty.energy_difficulty_bits);
+    BOOST_CHECK_EQUAL(started.major_context_size, difficulty.major_context_size);
+    BOOST_CHECK_EQUAL(started.minor_rounds, difficulty.minor_rounds);
+
+    CtamRestClient::MiningJob job = started;
+    for (int i = 0; i < 100 && !job.IsTerminal(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        job = client.GetMiningJob(started.job_id);
+    }
+
+    BOOST_REQUIRE_EQUAL(job.status, "completed");
+    BOOST_REQUIRE(job.found);
+    BOOST_REQUIRE(job.digest.has_value());
+    BOOST_REQUIRE(job.winning_nonce.has_value());
+    BOOST_CHECK_LE(*job.winning_nonce, 4095U);
+    BOOST_CHECK_GT(job.attempts, 0U);
+    BOOST_CHECK_LE(job.attempts, 4096U);
+    BOOST_CHECK(std::any_of(job.digest->begin(), job.digest->end(), [](unsigned char byte) { return byte != 0; }));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -143,7 +143,206 @@ void ValidateDifficultyTriple(const CTAMDifficultyTriple& difficulty)
     }
 }
 
+void ValidateMiningInputs(std::span<const unsigned char> work_bytes,
+                          uint32_t nonce_offset,
+                          uint32_t nonce_start,
+                          uint32_t nonce_end,
+                          std::span<const unsigned char> initial_state)
+{
+    if (work_bytes.empty()) {
+        throw std::runtime_error("CTAM mining requires non-empty work bytes");
+    }
+    if (initial_state.size() != 0 && initial_state.size() != CtamRestClient::OUTPUT_SIZE) {
+        throw std::runtime_error("CTAM mining initial state must be empty or exactly 32 bytes");
+    }
+    if (nonce_offset > work_bytes.size() - sizeof(uint32_t)) {
+        throw std::runtime_error("CTAM mining nonce offset must leave room for 4 nonce bytes inside the supplied work bytes");
+    }
+    if (nonce_end < nonce_start) {
+        throw std::runtime_error("CTAM mining nonce_end must be greater than or equal to nonce_start");
+    }
+}
+
+UniValue BuildMiningPayload(std::span<const unsigned char> work_bytes,
+                            uint32_t nonce_offset,
+                            uint32_t nonce_start,
+                            uint32_t nonce_end,
+                            const CTAMDifficultyTriple& difficulty,
+                            std::span<const unsigned char> initial_state,
+                            bool keep_branch)
+{
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
+    payload.pushKV("nonce_offset", nonce_offset);
+    payload.pushKV("nonce_start", nonce_start);
+    payload.pushKV("nonce_end", nonce_end);
+    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
+    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
+    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
+    payload.pushKV("injections", difficulty.minor_rounds);
+    payload.pushKV("keep_branch", keep_branch);
+    if (!initial_state.empty()) {
+        payload.pushKV("initial_state_hex", HexStr(initial_state));
+    }
+    return payload;
+}
+
+int64_t RequireJSONInt(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const std::string field_name{field};
+    if (!response.exists(field_name) || !response[field_name].isNum()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " did not return numeric " + field_name);
+    }
+    return response[field_name].getInt<int64_t>();
+}
+
+uint32_t RequireJSONUInt32(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const int64_t value = RequireJSONInt(response, field, endpoint);
+    if (value < 0 || value > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned out-of-range " + std::string(field));
+    }
+    return static_cast<uint32_t>(value);
+}
+
+uint64_t RequireJSONUInt64(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const int64_t value = RequireJSONInt(response, field, endpoint);
+    if (value < 0) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned negative " + std::string(field));
+    }
+    return static_cast<uint64_t>(value);
+}
+
+bool RequireJSONBool(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const std::string field_name{field};
+    if (!response.exists(field_name) || !response[field_name].isBool()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " did not return boolean " + field_name);
+    }
+    return response[field_name].get_bool();
+}
+
+std::string RequireJSONString(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const std::string field_name{field};
+    if (!response.exists(field_name) || !response[field_name].isStr()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " did not return string " + field_name);
+    }
+    return response[field_name].get_str();
+}
+
+std::optional<std::array<unsigned char, CtamRestClient::OUTPUT_SIZE>> ParseOptionalDigest(const UniValue& response, std::string_view endpoint)
+{
+    if (!response.exists("digest_hex") || response["digest_hex"].isNull()) {
+        return std::nullopt;
+    }
+    if (!response["digest_hex"].isStr()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned a non-string digest_hex");
+    }
+    const auto digest = TryParseHex<unsigned char>(response["digest_hex"].get_str());
+    if (!digest || digest->size() != CtamRestClient::OUTPUT_SIZE) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned an invalid digest");
+    }
+    std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> digest_array;
+    std::copy(digest->begin(), digest->end(), digest_array.begin());
+    return digest_array;
+}
+
+std::optional<uint32_t> ParseOptionalNonce(const UniValue& response, std::string_view endpoint)
+{
+    if (!response.exists("winning_nonce") || response["winning_nonce"].isNull()) {
+        return std::nullopt;
+    }
+    if (!response["winning_nonce"].isNum()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned a non-numeric winning_nonce");
+    }
+    const int64_t winning_nonce = response["winning_nonce"].getInt<int64_t>();
+    if (winning_nonce < 0 || winning_nonce > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned an out-of-range winning_nonce");
+    }
+    return static_cast<uint32_t>(winning_nonce);
+}
+
+CtamRestClient::MiningJob ParseMiningJob(const UniValue& response, std::string_view endpoint)
+{
+    const uint32_t minor_rounds = RequireJSONUInt32(response, "minor_ctam_difficulty_rounds", endpoint);
+    if (minor_rounds > CTAMDifficultyTriple::MAX_MINOR_ROUNDS) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned out-of-range minor_ctam_difficulty_rounds");
+    }
+
+    CtamRestClient::MiningJob job{
+        .job_id = RequireJSONString(response, "job_id", endpoint),
+        .status = RequireJSONString(response, "status", endpoint),
+        .found = RequireJSONBool(response, "found", endpoint),
+        .digest = ParseOptionalDigest(response, endpoint),
+        .winning_nonce = ParseOptionalNonce(response, endpoint),
+        .attempts = RequireJSONUInt64(response, "attempts", endpoint),
+        .nonce_start = RequireJSONUInt32(response, "nonce_start", endpoint),
+        .nonce_end = RequireJSONUInt32(response, "nonce_end", endpoint),
+        .nonce_offset = RequireJSONUInt32(response, "nonce_offset", endpoint),
+        .branch_key = RequireJSONUInt64(response, "branch_key", endpoint),
+        .branch_kept = RequireJSONBool(response, "branch_kept", endpoint),
+        .energy_difficulty_bits = RequireJSONUInt32(response, "energy_difficulty_bits", endpoint),
+        .major_context_size = RequireJSONUInt32(response, "major_ctam_difficulty_context_size", endpoint),
+        .minor_rounds = static_cast<uint8_t>(minor_rounds),
+        .injections = RequireJSONUInt32(response, "injections", endpoint),
+        .rounds = RequireJSONUInt32(response, "rounds", endpoint),
+        .error = std::nullopt,
+    };
+
+    if (response.exists("error") && !response["error"].isNull()) {
+        if (!response["error"].isStr()) {
+            throw std::runtime_error("CTAM " + std::string(endpoint) + " returned a non-string error");
+        }
+        job.error = response["error"].get_str();
+    }
+    if (job.minor_rounds != job.injections) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned mismatched minor rounds and injections");
+    }
+    if (job.found && (!job.digest.has_value() || !job.winning_nonce.has_value())) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " reported a solution without digest or winning_nonce");
+    }
+    if (!job.found && (job.digest.has_value() || job.winning_nonce.has_value())) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " reported no solution but returned solution fields");
+    }
+
+    return job;
+}
+
+CtamRestClient::StatusResult ParseStatus(const UniValue& response, std::string_view endpoint)
+{
+    return {
+        .ctam_version = RequireJSONString(response, "ctam_version", endpoint),
+        .status = RequireJSONString(response, "status", endpoint),
+        .context_size = RequireJSONUInt32(response, "context_size", endpoint),
+        .trunk_key = RequireJSONUInt64(response, "trunk_key", endpoint),
+        .branch_count = RequireJSONUInt64(response, "branch_count", endpoint),
+    };
+}
+
+CtamRestClient::CtaSha256Result ParseCtaSha256Result(const UniValue& response, std::string_view endpoint)
+{
+    const auto digest = ParseOptionalDigest(response, endpoint);
+    if (!digest) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " did not return digest_hex");
+    }
+
+    return {
+        .digest = *digest,
+        .branch_key = RequireJSONUInt64(response, "branch_key", endpoint),
+        .branch_kept = RequireJSONBool(response, "branch_kept", endpoint),
+        .injections = RequireJSONUInt32(response, "injections", endpoint),
+        .rounds = RequireJSONUInt32(response, "rounds", endpoint),
+    };
+}
+
 } // namespace
+
+bool CtamRestClient::MiningJob::IsTerminal() const
+{
+    return status == "completed" || status == "stopped" || status == "failed";
+}
 
 CtamRestClient::CtamRestClient(const CTAMClientOptions& options)
     : m_timeout_ms{options.timeout_ms}
@@ -158,7 +357,7 @@ CtamRestClient::CtamRestClient(const CTAMClientOptions& options)
     m_target_prefix = parsed.target_prefix;
 }
 
-UniValue CtamRestClient::RequestJSON(enum evhttp_cmd_type method, std::string_view path, std::string_view body) const
+UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::string_view body) const
 {
     raii_event_base base = obtain_event_base();
     raii_evhttp_connection connection = obtain_evhttp_connection_base(base.get(), m_host, m_port);
@@ -186,7 +385,7 @@ UniValue CtamRestClient::RequestJSON(enum evhttp_cmd_type method, std::string_vi
         }
     }
 
-    if (evhttp_make_request(connection.get(), request.get(), method, BuildTarget(m_target_prefix, path).c_str()) != 0) {
+    if (evhttp_make_request(connection.get(), request.get(), static_cast<evhttp_cmd_type>(method), BuildTarget(m_target_prefix, path).c_str()) != 0) {
         throw std::runtime_error("Failed to dispatch CTAM REST request");
     }
     request.release();
@@ -208,7 +407,12 @@ UniValue CtamRestClient::Health() const
     return RequestJSON(EVHTTP_REQ_GET, "health");
 }
 
-std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CtamRestClient::CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
+CtamRestClient::StatusResult CtamRestClient::Status() const
+{
+    return ParseStatus(RequestJSON(EVHTTP_REQ_GET, "status"), "/status");
+}
+
+CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256Replay(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
 {
     ValidateDifficultyTriple(difficulty);
 
@@ -221,18 +425,110 @@ std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CtamRestClient::CTA_SHA25
     payload.pushKV("keep_branch", keep_branch);
 
     const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/cta_sha256", payload.write());
-    if (!response.exists("digest_hex") || !response["digest_hex"].isStr()) {
-        throw std::runtime_error("CTAM /crypto/cta_sha256 did not return digest_hex");
+    CtaSha256Result result = ParseCtaSha256Result(response, "/crypto/cta_sha256");
+    if (result.injections != difficulty.minor_rounds) {
+        throw std::runtime_error("CTAM /crypto/cta_sha256 returned injections metadata that does not match the request");
     }
 
-    const auto digest = TryParseHex<unsigned char>(response["digest_hex"].get_str());
-    if (!digest || digest->size() != OUTPUT_SIZE) {
-        throw std::runtime_error("CTAM /crypto/cta_sha256 returned an invalid digest");
-    }
-
-    std::array<unsigned char, OUTPUT_SIZE> result;
-    std::copy(digest->begin(), digest->end(), result.begin());
     return result;
+}
+
+std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CtamRestClient::CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
+{
+    return CtaSha256Replay(message, difficulty, keep_branch).digest;
+}
+
+CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256KeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const
+{
+    CtaSha256Result result = CtaSha256Replay(message, difficulty, /*keep_branch=*/true);
+    if (!result.branch_kept) {
+        throw std::runtime_error("CTAM /crypto/cta_sha256 did not keep the replay branch");
+    }
+    return result;
+}
+
+CtamRestClient::CommitBranchResult CtamRestClient::CommitBranch(uint64_t branch_key) const
+{
+    if (branch_key == 0) {
+        throw std::runtime_error("CTAM branch commit requires a non-zero branch key");
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "branches/" + std::to_string(branch_key) + "/commit", "{}");
+    return {
+        .status = RequireJSONString(response, "status", "/branches/{branch_key}/commit"),
+    };
+}
+
+CtamRestClient::StatusResult CtamRestClient::EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const
+{
+    ValidateDifficultyTriple(difficulty);
+
+    const StatusResult status = Status();
+    if (status.status != "running") {
+        throw std::runtime_error("CTAM status is not running");
+    }
+    if (status.context_size < difficulty.major_context_size) {
+        throw std::runtime_error("CTAM context_size is below the requested major difficulty");
+    }
+    if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        throw std::runtime_error("CTAM major difficulty is below the BNG consensus minimum");
+    }
+    return status;
+}
+
+CtamRestClient::MiningJob CtamRestClient::StartMiningJob(std::span<const unsigned char> work_bytes,
+                                                         uint32_t nonce_offset,
+                                                         uint32_t nonce_start,
+                                                         uint32_t nonce_end,
+                                                         const CTAMDifficultyTriple& difficulty,
+                                                         std::span<const unsigned char> initial_state,
+                                                         bool keep_branch) const
+{
+    ValidateDifficultyTriple(difficulty);
+    ValidateMiningInputs(work_bytes, nonce_offset, nonce_start, nonce_end, initial_state);
+
+    const UniValue payload = BuildMiningPayload(work_bytes, nonce_offset, nonce_start, nonce_end, difficulty, initial_state, keep_branch);
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "mining", payload.write());
+    MiningJob job = ParseMiningJob(response, "/mining");
+
+    if (job.nonce_start != nonce_start || job.nonce_end != nonce_end || job.nonce_offset != nonce_offset) {
+        throw std::runtime_error("CTAM /mining returned nonce metadata that does not match the request");
+    }
+    if (job.energy_difficulty_bits != difficulty.energy_difficulty_bits ||
+        job.major_context_size != difficulty.major_context_size ||
+        job.minor_rounds != difficulty.minor_rounds) {
+        throw std::runtime_error("CTAM /mining returned a difficulty tuple that does not match the request");
+    }
+
+    return job;
+}
+
+CtamRestClient::MiningJob CtamRestClient::GetMiningJob(std::string_view job_id) const
+{
+    if (job_id.empty()) {
+        throw std::runtime_error("CTAM mining job id must not be empty");
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_GET, "mining/" + std::string(job_id));
+    MiningJob job = ParseMiningJob(response, "/mining/{job_id}");
+    if (job.job_id != job_id) {
+        throw std::runtime_error("CTAM /mining/{job_id} returned a different job_id");
+    }
+    return job;
+}
+
+CtamRestClient::MiningJob CtamRestClient::StopMiningJob(std::string_view job_id) const
+{
+    if (job_id.empty()) {
+        throw std::runtime_error("CTAM mining job id must not be empty");
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "mining/" + std::string(job_id) + "/stop", "{}");
+    MiningJob job = ParseMiningJob(response, "/mining/{job_id}/stop");
+    if (job.job_id != job_id) {
+        throw std::runtime_error("CTAM /mining/{job_id}/stop returned a different job_id");
+    }
+    return job;
 }
 
 CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned char> work_bytes,
@@ -244,34 +540,9 @@ CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned 
                                                        bool keep_branch) const
 {
     ValidateDifficultyTriple(difficulty);
+    ValidateMiningInputs(work_bytes, nonce_offset, nonce_start, nonce_end, initial_state);
 
-    if (work_bytes.empty()) {
-        throw std::runtime_error("CTAM mining requires non-empty work bytes");
-    }
-    if (initial_state.size() != 0 && initial_state.size() != OUTPUT_SIZE) {
-        throw std::runtime_error("CTAM mining initial state must be empty or exactly 32 bytes");
-    }
-    if (nonce_offset > work_bytes.size() - sizeof(uint32_t)) {
-        throw std::runtime_error("CTAM mining nonce offset must leave room for 4 nonce bytes inside the supplied work bytes");
-    }
-    if (nonce_end < nonce_start) {
-        throw std::runtime_error("CTAM mining nonce_end must be greater than or equal to nonce_start");
-    }
-
-    UniValue payload(UniValue::VOBJ);
-    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
-    payload.pushKV("nonce_offset", nonce_offset);
-    payload.pushKV("nonce_start", nonce_start);
-    payload.pushKV("nonce_end", nonce_end);
-    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
-    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
-    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
-    payload.pushKV("injections", difficulty.minor_rounds);
-    payload.pushKV("keep_branch", keep_branch);
-    if (!initial_state.empty()) {
-        payload.pushKV("initial_state_hex", HexStr(initial_state));
-    }
-
+    const UniValue payload = BuildMiningPayload(work_bytes, nonce_offset, nonce_start, nonce_end, difficulty, initial_state, keep_branch);
     const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/mine_csha256", payload.write());
     if (!response.exists("found") || !response["found"].isBool()) {
         throw std::runtime_error("CTAM /crypto/mine_csha256 did not return found");
@@ -289,7 +560,7 @@ CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned 
     MineResult result{
         .found = response["found"].get_bool(),
         .digest = std::nullopt,
-        .branch_key = static_cast<uint32_t>(response["branch_key"].getInt<int64_t>()),
+        .branch_key = RequireJSONUInt64(response, "branch_key", "/crypto/mine_csha256"),
         .branch_kept = response["branch_kept"].get_bool(),
         .winning_nonce = std::nullopt,
         .nonce_start = nonce_start,

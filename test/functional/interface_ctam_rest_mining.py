@@ -5,9 +5,9 @@
 """Exercise the planned BNG-to-CTAM mining client contract.
 
 This test starts a sibling CTAM REST server, drives it through a small BNG-side
-client wrapper, and verifies the branch invariant that matters for mining:
-only the winning branch is committed, and CTAM clears all other branches when
-that commit happens.
+client wrapper, and verifies the job-oriented mining API plus the branch
+invariant that matters for mining: only the winning branch is committed, and
+CTAM clears all other branches when that commit happens.
 
 It also smoke-tests the existing `/crypto/cta_sha256` endpoint as the first
 mock external `csha256` implementation path.
@@ -91,16 +91,70 @@ class CtamRestClient:
         }
         return self.request("POST", f"branches/{branch_key}/cxor", payload)
 
-    def cta_sha256(self, *, message_hex: str, injections: int, keep_branch: bool = False):
+    def cta_sha256(
+        self,
+        *,
+        message_hex: str,
+        energy_difficulty_bits: int,
+        major_ctam_difficulty_context_size: int,
+        minor_ctam_difficulty_rounds: int,
+        keep_branch: bool = False,
+    ):
         return self.request(
             "POST",
             "crypto/cta_sha256",
             {
                 "message_hex": message_hex,
-                "injections": injections,
+                "energy_difficulty_bits": energy_difficulty_bits,
+                "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
+                "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
+                "injections": minor_ctam_difficulty_rounds,
                 "keep_branch": keep_branch,
             },
         )
+
+    def start_mining_job(
+        self,
+        *,
+        work_bytes_hex: str,
+        nonce_offset: int,
+        nonce_start: int,
+        nonce_end: int,
+        energy_difficulty_bits: int,
+        major_ctam_difficulty_context_size: int,
+        minor_ctam_difficulty_rounds: int,
+        keep_branch: bool = False,
+    ):
+        return self.request(
+            "POST",
+            "mining",
+            {
+                "work_bytes_hex": work_bytes_hex,
+                "nonce_offset": nonce_offset,
+                "nonce_start": nonce_start,
+                "nonce_end": nonce_end,
+                "energy_difficulty_bits": energy_difficulty_bits,
+                "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
+                "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
+                "keep_branch": keep_branch,
+            },
+        )
+
+    def get_mining_job(self, job_id: str):
+        return self.request("GET", f"mining/{job_id}")
+
+    def stop_mining_job(self, job_id: str):
+        return self.request("POST", f"mining/{job_id}/stop")
+
+    def wait_for_mining_job(self, job_id: str, *, timeout: float = 5.0):
+        deadline = time.monotonic() + timeout
+        job = None
+        while time.monotonic() < deadline:
+            job = self.get_mining_job(job_id)
+            if job["status"] in {"completed", "stopped", "failed"}:
+                return job
+            time.sleep(0.05)
+        raise AssertionError(f"mining job {job_id} did not finish, last response={job}")
 
     @staticmethod
     def _bit_indices_to_stream_hex(indices: list[int], context_size: int) -> str:
@@ -233,22 +287,50 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
             assert_equal(status["branch_count"], 0)
 
             self.log.info("Smoke-test the mock external CTA-SHA256 endpoint")
-            digest = ctam.cta_sha256(message_hex="616263", injections=1, keep_branch=False)
+            digest = ctam.cta_sha256(
+                message_hex="616263",
+                energy_difficulty_bits=0x207FFFFF,
+                major_ctam_difficulty_context_size=context_size,
+                minor_ctam_difficulty_rounds=16,
+                keep_branch=False,
+            )
             assert_equal(digest["branch_kept"], False)
-            assert_equal(digest["injections"], 1)
+            assert_equal(digest["injections"], 16)
             assert_equal(len(digest["digest_hex"]), 64)
+
+            self.log.info("Start and poll a CTAM /mining worker job over node-owned work bytes")
+            header_bytes = bytearray(80)
+            header_bytes[0:4] = (4).to_bytes(4, "little", signed=True)
+            header_bytes[68:72] = (1_700_000_000).to_bytes(4, "little")
+            header_bytes[72:76] = (0x207FFFFF).to_bytes(4, "little")
+            header_bytes[76:80] = (0).to_bytes(4, "little")
+            started = ctam.start_mining_job(
+                work_bytes_hex=header_bytes.hex(),
+                nonce_offset=76,
+                nonce_start=0,
+                nonce_end=4095,
+                energy_difficulty_bits=0x207FFFFF,
+                major_ctam_difficulty_context_size=context_size,
+                minor_ctam_difficulty_rounds=16,
+                keep_branch=False,
+            )
+            assert_equal(started["status"], "running")
+            assert_equal(started["nonce_offset"], 76)
+            assert_equal(started["energy_difficulty_bits"], 0x207FFFFF)
+            assert_equal(started["major_ctam_difficulty_context_size"], context_size)
+            assert_equal(started["minor_ctam_difficulty_rounds"], 16)
+
+            job = ctam.wait_for_mining_job(started["job_id"])
+            assert_equal(job["status"], "completed")
+            assert_equal(job["found"], True)
+            assert 0 <= job["winning_nonce"] <= 4095
+            assert_equal(len(job["digest_hex"]), 64)
+            assert_equal(job["branch_kept"], False)
 
             self.log.info("Create two competing candidate branches from BNG-side code")
             winning_branch = ctam.create_branch()
             losing_branch = ctam.create_branch()
             assert_equal(len(ctam.list_branches()["branches"]), 2)
-
-            self.log.info("Replay separate CXOR work on each candidate branch")
-            winner_result = ctam.branch_cxor(winning_branch, [0, 1, 5, 13], context_size)
-            loser_result = ctam.branch_cxor(losing_branch, [2, 3, 8], context_size)
-            assert_equal(winner_result["branch_key"], winning_branch)
-            assert_equal(loser_result["branch_key"], losing_branch)
-            assert_equal(ctam.status()["branch_count"], 2)
 
             self.log.info("Commit only the winning branch")
             commit_result = ctam.commit_branch(winning_branch)
