@@ -62,6 +62,25 @@ bool DigestMeetsTarget(const std::array<unsigned char, CtamRestClient::OUTPUT_SI
     return digest <= target;
 }
 
+void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expected_height, const uint256& expected_hash)
+{
+    if (expected_height < 0) {
+        throw std::runtime_error("CTAM trunk state requires a non-negative BNG height");
+    }
+    if (!status.bng_height) {
+        throw std::runtime_error("CTAM status is missing bng_height; cannot prove trunk state matches BNG chain prefix");
+    }
+    if (*status.bng_height != static_cast<uint64_t>(expected_height)) {
+        throw std::runtime_error(strprintf("CTAM trunk height %u does not match expected BNG height %d", *status.bng_height, expected_height));
+    }
+    if (!status.bng_block_hash) {
+        throw std::runtime_error("CTAM status is missing bng_block_hash; cannot prove trunk state matches BNG chain prefix");
+    }
+    if (*status.bng_block_hash != expected_hash.ToString()) {
+        throw std::runtime_error("CTAM trunk block hash does not match expected BNG chain prefix");
+    }
+}
+
 } // namespace
 
 CtamMiningOptions GetCtamMiningOptions(const ArgsManager& args)
@@ -110,7 +129,7 @@ CtamHeaderMiningWork CtamMiningBackend::BuildHeaderWork(const CBlockHeader& head
     return BuildCtamHeaderMiningWork(header);
 }
 
-bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries) const
+bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries, int expected_trunk_height, const uint256& expected_trunk_hash) const
 {
     if (!Enabled()) {
         throw std::logic_error("CTAM mining backend is disabled");
@@ -125,6 +144,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     CtamRestClient client{m_options.client_options};
     const auto status = client.Status();
     RequireRunningStatus(status);
+    RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash);
     const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
@@ -175,7 +195,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     CBlockHeader solved_header{header};
     solved_header.nNonce = *job.winning_nonce;
     const CtamHeaderMiningWork solved_work = BuildHeaderWork(solved_header);
-    const auto replay = client.CtaSha256WorkBytesReplay(solved_work.work_bytes, difficulty, /*keep_branch=*/false);
+    const auto replay = client.PostCtaSha256Message(solved_work.work_bytes, difficulty, /*keep_branch=*/false);
     if (replay.branch_kept) {
         throw std::runtime_error("CTAM solved-header replay unexpectedly retained a branch");
     }
@@ -196,10 +216,21 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
 
 bool CtamMiningBackend::SolveHeader(ChainstateManager& chainman, CBlockHeader& header, uint64_t& max_tries) const
 {
-    return SolveHeader(chainman.m_interrupt, header, max_tries);
+    int expected_trunk_height{-1};
+    uint256 expected_trunk_hash;
+    {
+        LOCK(::cs_main);
+        const CBlockIndex* tip = chainman.ActiveChain().Tip();
+        if (tip == nullptr) {
+            throw std::runtime_error("Cannot mine with CTAM before BNG active chain has a tip");
+        }
+        expected_trunk_height = tip->nHeight;
+        expected_trunk_hash = tip->GetBlockHash();
+    }
+    return SolveHeader(chainman.m_interrupt, header, max_tries, expected_trunk_height, expected_trunk_hash);
 }
 
-bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
+bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_trunk_height, const uint256& expected_trunk_hash) const
 {
     if (!Enabled()) {
         return true;
@@ -209,9 +240,10 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
         CtamRestClient client{m_options.client_options};
         const auto status = client.Status();
         RequireRunningStatus(status);
+        RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash);
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
-        const auto result = client.CtaSha256WorkBytesReplay(work.work_bytes, difficulty, /*keep_branch=*/false);
+        const auto result = client.PostCtaSha256Message(work.work_bytes, difficulty, /*keep_branch=*/false);
         if (result.branch_kept) {
             throw std::runtime_error("CTAM verification replay unexpectedly retained a branch");
         }

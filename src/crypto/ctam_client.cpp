@@ -172,7 +172,7 @@ UniValue BuildMiningPayload(std::span<const unsigned char> work_bytes,
                             bool keep_branch)
 {
     UniValue payload(UniValue::VOBJ);
-    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
+    payload.pushKV("payload_hex", HexStr(work_bytes));
     payload.pushKV("nonce_offset", nonce_offset);
     payload.pushKV("nonce_start", nonce_start);
     payload.pushKV("nonce_end", nonce_end);
@@ -228,6 +228,34 @@ std::string RequireJSONString(const UniValue& response, std::string_view field, 
     const std::string field_name{field};
     if (!response.exists(field_name) || !response[field_name].isStr()) {
         throw std::runtime_error("CTAM " + std::string(endpoint) + " did not return string " + field_name);
+    }
+    return response[field_name].get_str();
+}
+
+std::optional<uint64_t> ParseOptionalUInt64(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const std::string field_name{field};
+    if (!response.exists(field_name) || response[field_name].isNull()) {
+        return std::nullopt;
+    }
+    if (!response[field_name].isNum()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned non-numeric " + field_name);
+    }
+    const int64_t value = response[field_name].getInt<int64_t>();
+    if (value < 0) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned negative " + field_name);
+    }
+    return static_cast<uint64_t>(value);
+}
+
+std::optional<std::string> ParseOptionalString(const UniValue& response, std::string_view field, std::string_view endpoint)
+{
+    const std::string field_name{field};
+    if (!response.exists(field_name) || response[field_name].isNull()) {
+        return std::nullopt;
+    }
+    if (!response[field_name].isStr()) {
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned non-string " + field_name);
     }
     return response[field_name].get_str();
 }
@@ -317,6 +345,8 @@ CtamRestClient::StatusResult ParseStatus(const UniValue& response, std::string_v
         .status = RequireJSONString(response, "status", endpoint),
         .context_size = RequireJSONUInt32(response, "context_size", endpoint),
         .trunk_key = RequireJSONUInt64(response, "trunk_key", endpoint),
+        .bng_height = ParseOptionalUInt64(response, "bng_height", endpoint),
+        .bng_block_hash = ParseOptionalString(response, "bng_block_hash", endpoint),
         .branch_count = RequireJSONUInt64(response, "branch_count", endpoint),
     };
 }
@@ -412,33 +442,12 @@ CtamRestClient::StatusResult CtamRestClient::Status() const
     return ParseStatus(RequestJSON(EVHTTP_REQ_GET, "status"), "/status");
 }
 
-CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256Replay(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
+CtamRestClient::CtaSha256Result CtamRestClient::PostCtaSha256Message(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
 {
     ValidateDifficultyTriple(difficulty);
 
     UniValue payload(UniValue::VOBJ);
-    payload.pushKV("message_hex", HexStr(message));
-    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
-    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
-    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
-    payload.pushKV("injections", difficulty.minor_rounds);
-    payload.pushKV("keep_branch", keep_branch);
-
-    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/cta_sha256", payload.write());
-    CtaSha256Result result = ParseCtaSha256Result(response, "/crypto/cta_sha256");
-    if (result.injections != difficulty.minor_rounds) {
-        throw std::runtime_error("CTAM /crypto/cta_sha256 returned injections metadata that does not match the request");
-    }
-
-    return result;
-}
-
-CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256WorkBytesReplay(std::span<const unsigned char> work_bytes, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
-{
-    ValidateDifficultyTriple(difficulty);
-
-    UniValue payload(UniValue::VOBJ);
-    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
+    payload.pushKV("payload_hex", HexStr(message));
     payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
     payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
     payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
@@ -456,12 +465,12 @@ CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256WorkBytesReplay(std::sp
 
 std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CtamRestClient::CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
 {
-    return CtaSha256Replay(message, difficulty, keep_branch).digest;
+    return PostCtaSha256Message(message, difficulty, keep_branch).digest;
 }
 
-CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256KeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const
+CtamRestClient::CtaSha256Result CtamRestClient::PostCtaSha256MessageKeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const
 {
-    CtaSha256Result result = CtaSha256Replay(message, difficulty, /*keep_branch=*/true);
+    CtaSha256Result result = PostCtaSha256Message(message, difficulty, /*keep_branch=*/true);
     if (!result.branch_kept) {
         throw std::runtime_error("CTAM /crypto/cta_sha256 did not keep the replay branch");
     }

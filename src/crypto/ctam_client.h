@@ -79,6 +79,8 @@ public:
         std::string status;
         uint32_t context_size;
         uint64_t trunk_key;
+        std::optional<uint64_t> bng_height;
+        std::optional<std::string> bng_block_hash;
         uint64_t branch_count;
     };
 
@@ -99,9 +101,8 @@ public:
     UniValue Health() const;
     StatusResult Status() const;
     std::array<unsigned char, OUTPUT_SIZE> CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
-    CtaSha256Result CtaSha256Replay(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
-    CtaSha256Result CtaSha256WorkBytesReplay(std::span<const unsigned char> work_bytes, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
-    CtaSha256Result CtaSha256KeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const;
+    CtaSha256Result PostCtaSha256Message(std::span<const unsigned char> input, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
+    CtaSha256Result PostCtaSha256MessageKeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const;
     CommitBranchResult CommitBranch(uint64_t branch_key) const;
     StatusResult EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const;
     MiningJob StartMiningJob(std::span<const unsigned char> work_bytes,

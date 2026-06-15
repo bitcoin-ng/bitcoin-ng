@@ -99,9 +99,13 @@ bool CtamPowValidationEnabled()
     return node::CtamMiningBackend{gArgs}.Enabled();
 }
 
-bool CheckCtamProofOfWork(const CBlockHeader& block)
+bool CheckCtamProofOfWork(const CBlockHeader& block, const CBlockIndex* pindexPrev)
 {
-    return node::CtamMiningBackend{gArgs}.VerifyHeader(block);
+    if (pindexPrev == nullptr) {
+        LogWarning("CTAM proof-of-work validation failed: previous block index is missing\n");
+        return false;
+    }
+    return node::CtamMiningBackend{gArgs}.VerifyHeader(block, pindexPrev->nHeight, pindexPrev->GetBlockHash());
 }
 
 } // namespace
@@ -3941,10 +3945,10 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    // Check proof of work matches claimed amount
-    if (fCheckPOW) {
-        const bool valid_pow = CtamPowValidationEnabled() ? CheckCtamProofOfWork(block) : CheckProofOfWork(block.GetHash(), block.nBits, consensusParams);
-        if (!valid_pow) {
+    // CTAM-backed proof-of-work is state-sensitive and must be checked once the
+    // previous block index is known in ContextualCheckBlockHeader().
+    if (fCheckPOW && !CtamPowValidationEnabled()) {
+        if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
         }
     }
@@ -4209,6 +4213,10 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     const Consensus::Params& consensusParams = chainman.GetConsensus();
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+
+    if (CtamPowValidationEnabled() && !CheckCtamProofOfWork(block, pindexPrev)) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    }
 
     // Check timestamp against prev
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())

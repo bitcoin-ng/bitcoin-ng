@@ -178,7 +178,7 @@ private:
 
 std::string StatusJson()
 {
-    return strprintf(R"({"ctam_version":"0.1.0","status":"running","context_size":%u,"trunk_key":0,"branch_count":0})", CTAM_CONTEXT_SIZE);
+    return strprintf(R"({"ctam_version":"0.1.0","status":"running","context_size":%u,"trunk_key":0,"bng_height":0,"bng_block_hash":"%s","branch_count":0})", CTAM_CONTEXT_SIZE, uint256::ONE.ToString());
 }
 
 std::string JobJson(std::string status, bool found, uint64_t branch_key, bool branch_kept, std::string winning_nonce, uint64_t attempts)
@@ -277,7 +277,7 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     uint64_t max_tries{100};
     ArgsManager args;
     ConfigureArgs(args, server);
-    BOOST_CHECK(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries));
+    BOOST_CHECK(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE));
     BOOST_CHECK_EQUAL(header.nNonce, 7U);
     BOOST_CHECK_EQUAL(max_tries, 92U);
 
@@ -309,7 +309,7 @@ BOOST_AUTO_TEST_CASE(stopped_and_exhausted_jobs_do_not_commit)
         uint64_t max_tries{100};
         ArgsManager args;
         ConfigureArgs(args, server);
-        BOOST_CHECK(!node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries));
+        BOOST_CHECK(!node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE));
         BOOST_CHECK_EQUAL(header.nNonce, 0U);
         BOOST_CHECK_EQUAL(max_tries, 97U);
         BOOST_CHECK(!HasBranchCommitRequest(server.Requests()));
@@ -326,7 +326,7 @@ BOOST_AUTO_TEST_CASE(stopped_and_exhausted_jobs_do_not_commit)
         uint64_t max_tries{100};
         ArgsManager args;
         ConfigureArgs(args, server);
-        BOOST_CHECK(!node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries));
+        BOOST_CHECK(!node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE));
         BOOST_CHECK_EQUAL(header.nNonce, 0U);
         BOOST_CHECK_EQUAL(max_tries, 0U);
         BOOST_CHECK(!HasBranchCommitRequest(server.Requests()));
@@ -346,7 +346,7 @@ BOOST_AUTO_TEST_CASE(malformed_winning_job_is_rejected)
     uint64_t max_tries{100};
     ArgsManager args;
     ConfigureArgs(args, server);
-    BOOST_CHECK_THROW(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries), std::runtime_error);
+    BOOST_CHECK_THROW(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE), std::runtime_error);
     BOOST_CHECK_EQUAL(header.nNonce, 0U);
     BOOST_CHECK(!HasBranchCommitRequest(server.Requests()));
 }
@@ -361,13 +361,13 @@ BOOST_AUTO_TEST_CASE(verify_header_uses_single_nonce_ctam_request_without_retain
     const CBlockHeader header = Header();
     ArgsManager args;
     ConfigureArgs(args, server);
-    BOOST_CHECK(node::CtamMiningBackend{args}.VerifyHeader(header));
+    BOOST_CHECK(node::CtamMiningBackend{args}.VerifyHeader(header, /*expected_trunk_height=*/0, uint256::ONE));
 
     const auto requests = server.Requests();
     BOOST_REQUIRE_EQUAL(requests.size(), 2U);
     BOOST_CHECK_EQUAL(requests[1].path, "/crypto/cta_sha256");
     const UniValue verify_request = ParseBody(requests[1].body);
-    BOOST_CHECK(verify_request.exists("work_bytes_hex"));
+    BOOST_CHECK(verify_request.exists("payload_hex"));
     BOOST_CHECK(!verify_request.exists("nonce_start"));
     BOOST_CHECK(!verify_request.exists("nonce_end"));
     BOOST_REQUIRE(verify_request["keep_branch"].isBool());

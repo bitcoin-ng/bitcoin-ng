@@ -107,7 +107,7 @@ BOOST_AUTO_TEST_CASE(status_and_kept_branch_commit_smoke)
 
     const std::string message{"ctam kept branch replay smoke"};
     const auto difficulty = GetTestDifficulty(status.context_size);
-    const auto replay = client.CtaSha256KeepBranch(MakeUCharSpan(message), difficulty);
+    const auto replay = client.PostCtaSha256MessageKeepBranch(MakeUCharSpan(message), difficulty);
 
     BOOST_CHECK(std::any_of(replay.digest.begin(), replay.digest.end(), [](unsigned char byte) { return byte != 0; }));
     BOOST_CHECK_GT(replay.branch_key, 0U);

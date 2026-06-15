@@ -158,7 +158,8 @@ static bool GenerateLegacySha256dBlock(ChainstateManager& chainman, CBlock& bloc
 static bool GenerateCtamBlock(ChainstateManager& chainman, const ArgsManager& args, CBlock& block, uint64_t& max_tries)
 {
     try {
-        return CtamMiningBackend{args}.SolveHeader(chainman, block, max_tries);
+        CtamMiningBackend backend{args};
+        return backend.SolveHeader(chainman, block, max_tries);
     } catch (const std::exception& e) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, e.what());
     }

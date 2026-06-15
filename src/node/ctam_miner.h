@@ -49,9 +49,9 @@ public:
     CTAMDifficultyTriple BuildDifficulty(const CBlockHeader& header) const;
     CtamHeaderMiningWork BuildHeaderWork(const CBlockHeader& header) const;
 
-    bool SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries) const;
+    bool SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries, int expected_trunk_height, const uint256& expected_trunk_hash) const;
     bool SolveHeader(ChainstateManager& chainman, CBlockHeader& header, uint64_t& max_tries) const;
-    bool VerifyHeader(const CBlockHeader& header) const;
+    bool VerifyHeader(const CBlockHeader& header, int expected_trunk_height, const uint256& expected_trunk_hash) const;
 
 private:
     CtamMiningOptions m_options;
