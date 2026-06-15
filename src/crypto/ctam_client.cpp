@@ -417,7 +417,7 @@ CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256Replay(std::span<const 
     ValidateDifficultyTriple(difficulty);
 
     UniValue payload(UniValue::VOBJ);
-    payload.pushKV("message_hex", HexStr(message));
+    payload.pushKV("work_bytes_hex", HexStr(message));
     payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
     payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
     payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);

@@ -11,6 +11,7 @@
 #include <validation.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <limits>
@@ -28,6 +29,37 @@ void RequireRunningStatus(const CtamRestClient::StatusResult& status)
     if (status.status != "running") {
         throw std::runtime_error("CTAM status is not running");
     }
+}
+
+std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CompactTargetFromBits(unsigned int bits)
+{
+    const unsigned int exponent = (bits >> 24) & 0xff;
+    const unsigned int mantissa = bits & 0x007fffff;
+    const bool negative = (bits & 0x00800000) != 0;
+    if (negative || mantissa == 0 || exponent == 0 || exponent > CtamRestClient::OUTPUT_SIZE) {
+        throw std::runtime_error("CTAM energy difficulty bits encode an invalid target");
+    }
+
+    std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> target{};
+    if (exponent <= 3) {
+        const unsigned int value = mantissa >> (8 * (3 - exponent));
+        const unsigned int start = CtamRestClient::OUTPUT_SIZE - exponent;
+        for (unsigned int i = 0; i < exponent; ++i) {
+            target[start + i] = static_cast<unsigned char>((value >> (8 * (exponent - 1 - i))) & 0xff);
+        }
+    } else {
+        const unsigned int start = CtamRestClient::OUTPUT_SIZE - exponent;
+        target[start] = static_cast<unsigned char>((mantissa >> 16) & 0xff);
+        target[start + 1] = static_cast<unsigned char>((mantissa >> 8) & 0xff);
+        target[start + 2] = static_cast<unsigned char>(mantissa & 0xff);
+    }
+    return target;
+}
+
+bool DigestMeetsTarget(const std::array<unsigned char, CtamRestClient::OUTPUT_SIZE>& digest, unsigned int bits)
+{
+    const auto target = CompactTargetFromBits(bits);
+    return digest <= target;
 }
 
 } // namespace
@@ -97,8 +129,8 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
     const uint32_t nonce_start = header.nNonce;
-    const uint64_t max_nonce_end = std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), uint64_t{nonce_start} + max_tries);
-    const uint32_t nonce_end = static_cast<uint32_t>(max_nonce_end);
+    const uint64_t nonce_budget_end = uint64_t{nonce_start} + max_tries - 1;
+    const uint32_t nonce_end = static_cast<uint32_t>(std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), nonce_budget_end));
 
     CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty, /*initial_state=*/{}, /*keep_branch=*/true);
     while (!job.IsTerminal()) {
@@ -127,6 +159,12 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     if (!job.winning_nonce) {
         throw std::runtime_error("CTAM mining job completed without winning_nonce");
     }
+    if (*job.winning_nonce < nonce_start || *job.winning_nonce > nonce_end) {
+        throw std::runtime_error("CTAM mining job returned winning_nonce outside the requested range");
+    }
+    if (!job.digest) {
+        throw std::runtime_error("CTAM mining job completed without digest metadata");
+    }
     if (!job.branch_kept) {
         throw std::runtime_error("CTAM mining job found a nonce without retaining its winning branch");
     }
@@ -134,11 +172,25 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
         throw std::runtime_error("CTAM mining job returned an invalid winning branch key");
     }
 
-    header.nNonce = *job.winning_nonce;
+    CBlockHeader solved_header{header};
+    solved_header.nNonce = *job.winning_nonce;
+    const CtamHeaderMiningWork solved_work = BuildHeaderWork(solved_header);
+    const auto replay = client.CtaSha256Replay(solved_work.work_bytes, difficulty, /*keep_branch=*/false);
+    if (replay.branch_kept) {
+        throw std::runtime_error("CTAM solved-header replay unexpectedly retained a branch");
+    }
+    if (*job.digest != replay.digest) {
+        throw std::runtime_error("CTAM mining job digest does not match solved-header replay");
+    }
+    if (!DigestMeetsTarget(replay.digest, difficulty.energy_difficulty_bits)) {
+        throw std::runtime_error("CTAM mining job digest does not satisfy the requested target");
+    }
+
     const auto commit = client.CommitBranch(job.branch_key);
     if (commit.status != "committed") {
         throw std::runtime_error("CTAM winning branch commit failed with status: " + commit.status);
     }
+    header.nNonce = solved_header.nNonce;
     return true;
 }
 
@@ -159,8 +211,11 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
         RequireRunningStatus(status);
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
-        const auto result = client.MineCSHA256(work.work_bytes, work.nonce_offset, header.nNonce, header.nNonce, difficulty);
-        return result.found && result.winning_nonce && *result.winning_nonce == header.nNonce;
+        const auto result = client.CtaSha256Replay(work.work_bytes, difficulty, /*keep_branch=*/false);
+        if (result.branch_kept) {
+            throw std::runtime_error("CTAM verification replay unexpectedly retained a branch");
+        }
+        return DigestMeetsTarget(result.digest, difficulty.energy_difficulty_bits);
     } catch (const std::exception& e) {
         LogWarning("CTAM proof-of-work validation failed: %s\n", e.what());
         return false;

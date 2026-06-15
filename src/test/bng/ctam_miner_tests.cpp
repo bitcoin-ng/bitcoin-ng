@@ -185,7 +185,7 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
 {
     const std::string digest = found ? R"("0102030405060708090001020304050607080900010203040506070809000102")" : "null";
     return strprintf(
-        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":100,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty_bits":%u,"major_ctam_difficulty_context_size":%u,"minor_ctam_difficulty_rounds":%u,"injections":%u,"rounds":64,"error":null})",
+        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty_bits":%u,"major_ctam_difficulty_context_size":%u,"minor_ctam_difficulty_rounds":%u,"injections":%u,"rounds":64,"error":null})",
         status,
         found ? "true" : "false",
         digest,
@@ -269,6 +269,7 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
         {EVHTTP_REQ_GET, "/status", StatusJson()},
         {EVHTTP_REQ_POST, "/mining", JobJson("running", false, 42, false, "null", 0)},
         {EVHTTP_REQ_GET, "/mining/1", JobJson("completed", true, 42, true, "7", 8)},
+        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":43,"branch_kept":false,"injections":16,"rounds":64})"},
         {EVHTTP_REQ_POST, "/branches/42/commit", R"({"status":"committed"})"},
     }};
 
@@ -281,7 +282,7 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(max_tries, 92U);
 
     const auto requests = server.Requests();
-    BOOST_REQUIRE_EQUAL(requests.size(), 4U);
+    BOOST_REQUIRE_EQUAL(requests.size(), 5U);
     BOOST_CHECK_EQUAL(requests[0].path, "/status");
     BOOST_CHECK_EQUAL(requests[1].path, "/mining");
     const UniValue mining_request = ParseBody(requests[1].body);
@@ -291,7 +292,8 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(mining_request["minor_ctam_difficulty_rounds"].getInt<int>(), static_cast<int>(CTAM_MINOR_ROUNDS));
     BOOST_REQUIRE(mining_request["keep_branch"].isBool());
     BOOST_CHECK(mining_request["keep_branch"].get_bool());
-    BOOST_CHECK_EQUAL(requests[3].path, "/branches/42/commit");
+    BOOST_CHECK_EQUAL(requests[3].path, "/crypto/cta_sha256");
+    BOOST_CHECK_EQUAL(requests[4].path, "/branches/42/commit");
     BOOST_CHECK(!server.SawUnexpectedRequest());
 }
 
@@ -353,7 +355,7 @@ BOOST_AUTO_TEST_CASE(verify_header_uses_single_nonce_ctam_request_without_retain
 {
     MockCtamServer server{{
         {EVHTTP_REQ_GET, "/status", StatusJson()},
-        {EVHTTP_REQ_POST, "/crypto/mine_csha256", R"({"found":true,"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":9,"branch_kept":false,"winning_nonce":0,"nonce_start":0,"nonce_end":0,"nonce_offset":76,"attempts":1,"energy_difficulty_bits":545259519,"major_ctam_difficulty_context_size":27,"minor_ctam_difficulty_rounds":16,"injections":16,"rounds":64})"},
+        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":9,"branch_kept":false,"injections":16,"rounds":64})"},
     }};
 
     const CBlockHeader header = Header();
@@ -363,10 +365,11 @@ BOOST_AUTO_TEST_CASE(verify_header_uses_single_nonce_ctam_request_without_retain
 
     const auto requests = server.Requests();
     BOOST_REQUIRE_EQUAL(requests.size(), 2U);
-    BOOST_CHECK_EQUAL(requests[1].path, "/crypto/mine_csha256");
+    BOOST_CHECK_EQUAL(requests[1].path, "/crypto/cta_sha256");
     const UniValue verify_request = ParseBody(requests[1].body);
-    BOOST_CHECK_EQUAL(verify_request["nonce_start"].getInt<int>(), 0);
-    BOOST_CHECK_EQUAL(verify_request["nonce_end"].getInt<int>(), 0);
+    BOOST_CHECK(verify_request.exists("work_bytes_hex"));
+    BOOST_CHECK(!verify_request.exists("nonce_start"));
+    BOOST_CHECK(!verify_request.exists("nonce_end"));
     BOOST_REQUIRE(verify_request["keep_branch"].isBool());
     BOOST_CHECK(!verify_request["keep_branch"].get_bool());
     BOOST_CHECK(!server.SawUnexpectedRequest());
