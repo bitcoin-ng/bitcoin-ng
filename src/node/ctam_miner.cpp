@@ -23,6 +23,13 @@ namespace {
 constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
 constexpr auto CTAM_MINING_POLL_INTERVAL{std::chrono::milliseconds{50}};
 
+void RequireRunningStatus(const CtamRestClient::StatusResult& status)
+{
+    if (status.status != "running") {
+        throw std::runtime_error("CTAM status is not running");
+    }
+}
+
 } // namespace
 
 CtamMiningOptions GetCtamMiningOptions(const ArgsManager& args)
@@ -71,12 +78,12 @@ CtamHeaderMiningWork CtamMiningBackend::BuildHeaderWork(const CBlockHeader& head
     return BuildCtamHeaderMiningWork(header);
 }
 
-bool CtamMiningBackend::SolveHeader(ChainstateManager& chainman, CBlockHeader& header, uint64_t& max_tries) const
+bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries) const
 {
     if (!Enabled()) {
         throw std::logic_error("CTAM mining backend is disabled");
     }
-    if (max_tries == 0 || chainman.m_interrupt) {
+    if (max_tries == 0 || interrupt) {
         return false;
     }
     if (header.nNonce == std::numeric_limits<uint32_t>::max()) {
@@ -84,17 +91,18 @@ bool CtamMiningBackend::SolveHeader(ChainstateManager& chainman, CBlockHeader& h
     }
 
     CtamRestClient client{m_options.client_options};
-    const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, client.Status().context_size);
-    client.EnsureReadyForMining(difficulty);
+    const auto status = client.Status();
+    RequireRunningStatus(status);
+    const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
     const uint32_t nonce_start = header.nNonce;
     const uint64_t max_nonce_end = std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), uint64_t{nonce_start} + max_tries);
     const uint32_t nonce_end = static_cast<uint32_t>(max_nonce_end);
 
-    CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty);
+    CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty, /*initial_state=*/{}, /*keep_branch=*/true);
     while (!job.IsTerminal()) {
-        if (chainman.m_interrupt) {
+        if (interrupt) {
             client.StopMiningJob(job.job_id);
             return false;
         }
@@ -119,9 +127,24 @@ bool CtamMiningBackend::SolveHeader(ChainstateManager& chainman, CBlockHeader& h
     if (!job.winning_nonce) {
         throw std::runtime_error("CTAM mining job completed without winning_nonce");
     }
+    if (!job.branch_kept) {
+        throw std::runtime_error("CTAM mining job found a nonce without retaining its winning branch");
+    }
+    if (job.branch_key == 0) {
+        throw std::runtime_error("CTAM mining job returned an invalid winning branch key");
+    }
 
     header.nNonce = *job.winning_nonce;
+    const auto commit = client.CommitBranch(job.branch_key);
+    if (commit.status != "committed") {
+        throw std::runtime_error("CTAM winning branch commit failed with status: " + commit.status);
+    }
     return true;
+}
+
+bool CtamMiningBackend::SolveHeader(ChainstateManager& chainman, CBlockHeader& header, uint64_t& max_tries) const
+{
+    return SolveHeader(chainman.m_interrupt, header, max_tries);
 }
 
 bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
@@ -132,8 +155,9 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
 
     try {
         CtamRestClient client{m_options.client_options};
-        const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, client.Status().context_size);
-        client.EnsureReadyForMining(difficulty);
+        const auto status = client.Status();
+        RequireRunningStatus(status);
+        const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
         const auto result = client.MineCSHA256(work.work_bytes, work.nonce_offset, header.nNonce, header.nNonce, difficulty);
         return result.found && result.winning_nonce && *result.winning_nonce == header.nNonce;

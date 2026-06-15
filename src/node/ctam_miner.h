@@ -15,6 +15,10 @@ class ArgsManager;
 class CBlockHeader;
 class ChainstateManager;
 
+namespace util {
+class SignalInterrupt;
+} // namespace util
+
 namespace node {
 
 struct CtamMiningOptions {
@@ -45,6 +49,7 @@ public:
     CTAMDifficultyTriple BuildDifficulty(const CBlockHeader& header) const;
     CtamHeaderMiningWork BuildHeaderWork(const CBlockHeader& header) const;
 
+    bool SolveHeader(const util::SignalInterrupt& interrupt, CBlockHeader& header, uint64_t& max_tries) const;
     bool SolveHeader(ChainstateManager& chainman, CBlockHeader& header, uint64_t& max_tries) const;
     bool VerifyHeader(const CBlockHeader& header) const;
 
