@@ -16,14 +16,13 @@
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <core_io.h>
-#include <crypto/ctam_client.h>
-#include <crypto/ctam_mining.h>
 #include <deploymentinfo.h>
 #include <deploymentstatus.h>
 #include <interfaces/mining.h>
 #include <key_io.h>
 #include <net.h>
 #include <node/context.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <node/warnings.h>
 #include <policy/ephemeral_policy.h>
@@ -47,54 +46,20 @@
 #include <validationinterface.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <thread>
 
 using interfaces::BlockRef;
 using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
+using node::CtamMiningBackend;
 using node::GetMinimumTime;
 using node::NodeContext;
 using node::RegenerateCommitments;
 using node::UpdateTime;
 using util::ToString;
-
-namespace {
-
-constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
-
-bool CtamMiningEnabled(const ArgsManager& args)
-{
-    return args.GetBoolArg("-ctammining", true);
-}
-
-CTAMClientOptions GetCTAMClientOptions(const ArgsManager& args)
-{
-    return {
-        .base_url = args.GetArg("-ctamresturl", "http://127.0.0.1:8080/"),
-        .timeout_ms = static_cast<int>(args.GetIntArg("-ctamtimeoutms", DEFAULT_CTAM_TIMEOUT_MS)),
-    };
-}
-
-uint32_t GetCtamContextSize(CtamRestClient& client)
-{
-    return client.Status().context_size;
-}
-
-CTAMDifficultyTriple GetCtamDifficulty(const CBlockHeader& block, uint32_t context_size)
-{
-    return {
-        .energy_difficulty_bits = block.nBits,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
-    };
-}
-
-} // namespace
 
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
@@ -192,53 +157,11 @@ static bool GenerateLegacySha256dBlock(ChainstateManager& chainman, CBlock& bloc
 
 static bool GenerateCtamBlock(ChainstateManager& chainman, const ArgsManager& args, CBlock& block, uint64_t& max_tries)
 {
-    if (max_tries == 0 || chainman.m_interrupt) {
-        return false;
+    try {
+        return CtamMiningBackend{args}.SolveHeader(chainman, block, max_tries);
+    } catch (const std::exception& e) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, e.what());
     }
-    if (block.nNonce == std::numeric_limits<uint32_t>::max()) {
-        return true;
-    }
-
-    CtamRestClient client{GetCTAMClientOptions(args)};
-    const uint32_t context_size = GetCtamContextSize(client);
-    const CTAMDifficultyTriple difficulty = GetCtamDifficulty(block, context_size);
-    client.EnsureReadyForMining(difficulty);
-    const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(block.GetBlockHeader());
-
-    const uint32_t nonce_start = block.nNonce;
-    const uint64_t max_nonce_end = std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), uint64_t{nonce_start} + max_tries);
-    const uint32_t nonce_end = static_cast<uint32_t>(max_nonce_end);
-
-    CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty);
-    while (!job.IsTerminal()) {
-        if (chainman.m_interrupt) {
-            client.StopMiningJob(job.job_id);
-            return false;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds{50});
-        job = client.GetMiningJob(job.job_id);
-    }
-
-    max_tries = job.attempts >= max_tries ? 0 : max_tries - job.attempts;
-
-    if (job.status == "failed") {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, job.error.value_or("CTAM mining job failed"));
-    }
-    if (job.status == "stopped") {
-        return false;
-    }
-    if (job.status != "completed") {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "CTAM mining job returned unexpected status: " + job.status);
-    }
-    if (!job.found) {
-        return false;
-    }
-    if (!job.winning_nonce) {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "CTAM mining job completed without winning_nonce");
-    }
-
-    block.nNonce = *job.winning_nonce;
-    return true;
 }
 
 static bool GenerateBlock(ChainstateManager& chainman, const ArgsManager& args, CBlock&& block, uint64_t& max_tries, std::shared_ptr<const CBlock>& block_out, bool process_new_block)
@@ -246,7 +169,7 @@ static bool GenerateBlock(ChainstateManager& chainman, const ArgsManager& args, 
     block_out.reset();
     block.hashMerkleRoot = BlockMerkleRoot(block);
 
-    const bool solved = CtamMiningEnabled(args) ? GenerateCtamBlock(chainman, args, block, max_tries) : GenerateLegacySha256dBlock(chainman, block, max_tries);
+    const bool solved = CtamMiningBackend{args}.Enabled() ? GenerateCtamBlock(chainman, args, block, max_tries) : GenerateLegacySha256dBlock(chainman, block, max_tries);
     if (!solved) {
         return false;
     }

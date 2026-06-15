@@ -218,6 +218,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/coin.cpp
   node/coins_view_args.cpp
   node/connection_types.cpp
+  node/ctam_miner.cpp
   node/context.cpp
   node/database_args.cpp
   node/eviction.cpp

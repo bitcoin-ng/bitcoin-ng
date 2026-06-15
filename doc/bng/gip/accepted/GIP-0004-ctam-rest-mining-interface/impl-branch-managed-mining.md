@@ -35,7 +35,7 @@ consensus specification.
 - **REST client** means the BNG-side HTTP client code used to call CTAM. The
   BNG codebase must use this REST client rather than implementing
   `cta_sha256d` / `csha256d` locally.
-- **Backend** means the planned BNG-side C++ helper, for example
+- **CTAM-Backend** means the planned BNG-side C++ helper, for example
   `node::CtamMiningBackend`. It is not the CTAM server. It is the shared BNG
   component that owns CTAM mining REST calls, request/response mapping, polling,
   branch-job handling, and solved-header verification.
@@ -248,13 +248,13 @@ builds CTAM mining requests, difficulty tuples, and verification calls.
 
 ## Implementation Plan
 
-### Step 1. Add The Mining Backend
+### Step 1. Add The CTAM-Mining Backend
 
 Create the backend and move CTAM-specific ownership into it.
 
 The backend should absorb:
 
-- `-ctammining`, `-ctamresturl`, and `-ctamtimeoutms` parsing
+- `-ctammining`, `-ctamresturl`, and `-ctamtimeoutms` parsing (see `init.cpp`)
 - CTAM client option construction
 - CTAM readiness checks
 - live context size lookup

@@ -19,8 +19,6 @@
 #include <consensus/tx_check.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
-#include <crypto/ctam_client.h>
-#include <crypto/ctam_mining.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
 #include <hash.h>
@@ -35,6 +33,7 @@
 #include <logging.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
+#include <node/ctam_miner.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
 #include <policy/policy.h>
@@ -95,47 +94,14 @@ using node::SnapshotMetadata;
 
 namespace {
 
-constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
-
 bool CtamPowValidationEnabled()
 {
-    return gArgs.GetBoolArg("-ctammining", true);
-}
-
-CTAMClientOptions GetCTAMClientOptions()
-{
-    return {
-        .base_url = gArgs.GetArg("-ctamresturl", "http://127.0.0.1:8080/"),
-        .timeout_ms = static_cast<int>(gArgs.GetIntArg("-ctamtimeoutms", DEFAULT_CTAM_TIMEOUT_MS)),
-    };
-}
-
-std::optional<uint32_t> GetCtamContextSize(CtamRestClient& client)
-{
-    return client.Status().context_size;
+    return node::CtamMiningBackend{gArgs}.Enabled();
 }
 
 bool CheckCtamProofOfWork(const CBlockHeader& block)
 {
-    try {
-        CtamRestClient client{GetCTAMClientOptions()};
-        const auto context_size = GetCtamContextSize(client);
-        if (!context_size) {
-            return false;
-        }
-        const CTAMDifficultyTriple difficulty{
-            .energy_difficulty_bits = block.nBits,
-            .major_context_size = *context_size,
-            .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
-        };
-        client.EnsureReadyForMining(difficulty);
-        const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(block);
-        const auto result = client.MineCSHA256(work.work_bytes, work.nonce_offset, block.nNonce, block.nNonce, difficulty);
-        return result.found && result.winning_nonce && *result.winning_nonce == block.nNonce;
-    } catch (const std::exception& e) {
-        LogWarning("CTAM proof-of-work validation failed: %s\n", e.what());
-        return false;
-    }
+    return node::CtamMiningBackend{gArgs}.VerifyHeader(block);
 }
 
 } // namespace
