@@ -7,7 +7,7 @@ CTAM server over REST.
 
 This plan intentionally chooses:
 
-### Option 3. Jump straight to explicit branch-managed mining
+### Jump straight to explicit branch-managed mining
 
 BNG is a Bitcoin Core fork. It must keep original Bitcoin Core behavior
 unchanged except for the BNG block proof-of-work path.
@@ -89,9 +89,10 @@ The current code already has useful CTAM plumbing:
 
 The gap is ownership and branch semantics.
 
+
 ## Direction
 
-Implement Option 3 directly.
+Implement branch-managed mining directly.
 
 Do not land an intermediate architecture whose final state is "generic CTAM
 REST calls moved somewhere else." The new backend should be designed around
@@ -104,9 +105,7 @@ The implementation still has one narrow boundary:
   the decision to accept a winning result.
 - CTAM owns CTA-SHA256 execution, nonce search, mining-job branch state, branch
   cleanup, and any branch retention/commit mechanics exposed by `/mining`.
-- BNG's RPC mining code and block validation code call
-  `node::CtamMiningBackend`. Only that backend constructs CTAM REST requests
-  directly.
+- RPC and validation code call the internal implementation( `node::CtamMiningBackend` - which calls CTAM REST client). They do not construct CTAM REST calls directly.
 
 ## CTAM API Usage
 
