@@ -175,7 +175,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     CBlockHeader solved_header{header};
     solved_header.nNonce = *job.winning_nonce;
     const CtamHeaderMiningWork solved_work = BuildHeaderWork(solved_header);
-    const auto replay = client.CtaSha256Replay(solved_work.work_bytes, difficulty, /*keep_branch=*/false);
+    const auto replay = client.CtaSha256WorkBytesReplay(solved_work.work_bytes, difficulty, /*keep_branch=*/false);
     if (replay.branch_kept) {
         throw std::runtime_error("CTAM solved-header replay unexpectedly retained a branch");
     }
@@ -211,7 +211,7 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header) const
         RequireRunningStatus(status);
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
-        const auto result = client.CtaSha256Replay(work.work_bytes, difficulty, /*keep_branch=*/false);
+        const auto result = client.CtaSha256WorkBytesReplay(work.work_bytes, difficulty, /*keep_branch=*/false);
         if (result.branch_kept) {
             throw std::runtime_error("CTAM verification replay unexpectedly retained a branch");
         }

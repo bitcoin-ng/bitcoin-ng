@@ -100,6 +100,7 @@ public:
     StatusResult Status() const;
     std::array<unsigned char, OUTPUT_SIZE> CTA_SHA256(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
     CtaSha256Result CtaSha256Replay(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
+    CtaSha256Result CtaSha256WorkBytesReplay(std::span<const unsigned char> work_bytes, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
     CtaSha256Result CtaSha256KeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const;
     CommitBranchResult CommitBranch(uint64_t branch_key) const;
     StatusResult EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const;

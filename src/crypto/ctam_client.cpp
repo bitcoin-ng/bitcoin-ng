@@ -417,7 +417,28 @@ CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256Replay(std::span<const 
     ValidateDifficultyTriple(difficulty);
 
     UniValue payload(UniValue::VOBJ);
-    payload.pushKV("work_bytes_hex", HexStr(message));
+    payload.pushKV("message_hex", HexStr(message));
+    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
+    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
+    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
+    payload.pushKV("injections", difficulty.minor_rounds);
+    payload.pushKV("keep_branch", keep_branch);
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/cta_sha256", payload.write());
+    CtaSha256Result result = ParseCtaSha256Result(response, "/crypto/cta_sha256");
+    if (result.injections != difficulty.minor_rounds) {
+        throw std::runtime_error("CTAM /crypto/cta_sha256 returned injections metadata that does not match the request");
+    }
+
+    return result;
+}
+
+CtamRestClient::CtaSha256Result CtamRestClient::CtaSha256WorkBytesReplay(std::span<const unsigned char> work_bytes, const CTAMDifficultyTriple& difficulty, bool keep_branch) const
+{
+    ValidateDifficultyTriple(difficulty);
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("work_bytes_hex", HexStr(work_bytes));
     payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
     payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
     payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
