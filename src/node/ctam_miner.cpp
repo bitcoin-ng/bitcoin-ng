@@ -24,13 +24,6 @@ namespace {
 constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
 constexpr auto CTAM_MINING_POLL_INTERVAL{std::chrono::milliseconds{50}};
 
-void RequireRunningStatus(const CtamRestClient::StatusResult& status)
-{
-    if (status.status != "running") {
-        throw std::runtime_error("CTAM status is not running");
-    }
-}
-
 std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CompactTargetFromBits(unsigned int bits)
 {
     const unsigned int exponent = (bits >> 24) & 0xff;
@@ -62,8 +55,14 @@ bool DigestMeetsTarget(const std::array<unsigned char, CtamRestClient::OUTPUT_SI
     return digest <= target;
 }
 
-void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expected_height, const uint256& expected_hash)
+void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expected_height, const uint256& expected_hash, uint32_t expected_context_size)
 {
+    if (status.status != "running") {
+        throw std::runtime_error("CTAM status is not running");
+    }
+    if (status.context_size != expected_context_size) {
+        throw std::runtime_error(strprintf("CTAM context_size %u does not match expected context_size %u", status.context_size, expected_context_size));
+    }
     if (expected_height < 0) {
         throw std::runtime_error("CTAM trunk state requires a non-negative BNG height");
     }
@@ -143,9 +142,8 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
 
     CtamRestClient client{m_options.client_options};
     const auto status = client.Status();
-    RequireRunningStatus(status);
-    RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash);
     const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
+    RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
     const uint32_t nonce_start = header.nNonce;
@@ -191,6 +189,9 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     if (job.branch_key == 0) {
         throw std::runtime_error("CTAM mining job returned an invalid winning branch key");
     }
+    
+    const auto final_status = client.Status();
+    RequireCtamTrunkState(final_status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
 
     CBlockHeader solved_header{header};
     solved_header.nNonce = *job.winning_nonce;
@@ -239,9 +240,8 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_tr
     try {
         CtamRestClient client{m_options.client_options};
         const auto status = client.Status();
-        RequireRunningStatus(status);
-        RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash);
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
+        RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
         const auto result = client.PostCtaSha256Message(work.work_bytes, difficulty, /*keep_branch=*/false);
         if (result.branch_kept) {
