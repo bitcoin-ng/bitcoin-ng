@@ -53,7 +53,7 @@ The `POST /crypto/cta_sha256` payload should use the CTAM DTO field names:
 ```json
 {
   "payload_hex": "<80-byte-header-hex>",
-  "energy_difficulty_bits": <nBits>,
+  "energy_difficulty": <compact_target>,
   "major_ctam_difficulty_context_size": <status.context_size>,
   "minor_ctam_difficulty_rounds": 16,
   "injections": 16,

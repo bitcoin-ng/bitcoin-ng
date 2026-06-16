@@ -30,7 +30,7 @@ std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CompactTargetFromBits(uns
     const unsigned int mantissa = bits & 0x007fffff;
     const bool negative = (bits & 0x00800000) != 0;
     if (negative || mantissa == 0 || exponent == 0 || exponent > CtamRestClient::OUTPUT_SIZE) {
-        throw std::runtime_error("CTAM energy difficulty bits encode an invalid target");
+        throw std::runtime_error("CTAM energy difficulty encodes an invalid target");
     }
 
     std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> target{};
@@ -113,7 +113,7 @@ CtamMiningOptions GetCtamMiningOptions(const ArgsManager& args)
 CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header, uint32_t context_size)
 {
     return {
-        .energy_difficulty_bits = header.nBits,
+        .energy_difficulty = header.nBits,
         .major_context_size = context_size,
         .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
@@ -220,7 +220,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     if (*job.digest != replay.digest) {
         throw std::runtime_error("CTAM mining job digest does not match solved-header replay");
     }
-    if (!DigestMeetsTarget(replay.digest, difficulty.energy_difficulty_bits)) {
+    if (!DigestMeetsTarget(replay.digest, difficulty.energy_difficulty)) {
         throw std::runtime_error("CTAM mining job digest does not satisfy the requested target");
     }
 
@@ -267,7 +267,7 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_tr
         if (result.branch_kept) {
             throw std::runtime_error("CTAM verification replay unexpectedly retained a branch");
         }
-        return DigestMeetsTarget(result.digest, difficulty.energy_difficulty_bits);
+        return DigestMeetsTarget(result.digest, difficulty.energy_difficulty);
     } catch (const std::exception& e) {
         LogWarning("CTAM proof-of-work validation failed: %s\n", e.what());
         return false;

@@ -129,8 +129,8 @@ UniValue ParseJSONObject(std::string_view body)
 
 void ValidateDifficultyTriple(const CTAMDifficultyTriple& difficulty)
 {
-    if (difficulty.energy_difficulty_bits == 0) {
-        throw std::runtime_error("CTAM energy difficulty bits must be non-zero");
+    if (difficulty.energy_difficulty == 0) {
+        throw std::runtime_error("CTAM energy difficulty must be non-zero");
     }
     if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
         throw std::runtime_error("CTAM major difficulty must be at least context_size 27 (~16 MiB)");
@@ -176,7 +176,7 @@ UniValue BuildMiningPayload(std::span<const unsigned char> work_bytes,
     payload.pushKV("nonce_offset", nonce_offset);
     payload.pushKV("nonce_start", nonce_start);
     payload.pushKV("nonce_end", nonce_end);
-    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
+    payload.pushKV("energy_difficulty", difficulty.energy_difficulty);
     payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
     payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
     payload.pushKV("injections", difficulty.minor_rounds);
@@ -311,7 +311,7 @@ CtamRestClient::MiningJob ParseMiningJob(const UniValue& response, std::string_v
         .nonce_offset = RequireJSONUInt32(response, "nonce_offset", endpoint),
         .branch_key = RequireJSONUInt64(response, "branch_key", endpoint),
         .branch_kept = RequireJSONBool(response, "branch_kept", endpoint),
-        .energy_difficulty_bits = RequireJSONUInt32(response, "energy_difficulty_bits", endpoint),
+        .energy_difficulty = RequireJSONUInt32(response, "energy_difficulty", endpoint),
         .major_context_size = RequireJSONUInt32(response, "major_ctam_difficulty_context_size", endpoint),
         .minor_rounds = static_cast<uint8_t>(minor_rounds),
         .injections = RequireJSONUInt32(response, "injections", endpoint),
@@ -448,7 +448,7 @@ CtamRestClient::CtaSha256Result CtamRestClient::PostCtaSha256Message(std::span<c
 
     UniValue payload(UniValue::VOBJ);
     payload.pushKV("payload_hex", HexStr(message));
-    payload.pushKV("energy_difficulty_bits", difficulty.energy_difficulty_bits);
+    payload.pushKV("energy_difficulty", difficulty.energy_difficulty);
     payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
     payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
     payload.pushKV("injections", difficulty.minor_rounds);
@@ -543,7 +543,7 @@ CtamRestClient::MiningJob CtamRestClient::StartMiningJob(std::span<const unsigne
     if (job.nonce_start != nonce_start || job.nonce_end != nonce_end || job.nonce_offset != nonce_offset) {
         throw std::runtime_error("CTAM /mining returned nonce metadata that does not match the request");
     }
-    if (job.energy_difficulty_bits != difficulty.energy_difficulty_bits ||
+    if (job.energy_difficulty != difficulty.energy_difficulty ||
         job.major_context_size != difficulty.major_context_size ||
         job.minor_rounds != difficulty.minor_rounds) {
         throw std::runtime_error("CTAM /mining returned a difficulty tuple that does not match the request");
@@ -616,7 +616,7 @@ CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned 
         .nonce_end = nonce_end,
         .nonce_offset = nonce_offset,
         .attempts = static_cast<uint64_t>(response["attempts"].getInt<int64_t>()),
-        .energy_difficulty_bits = difficulty.energy_difficulty_bits,
+        .energy_difficulty = difficulty.energy_difficulty,
         .major_context_size = difficulty.major_context_size,
         .minor_rounds = difficulty.minor_rounds,
     };

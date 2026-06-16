@@ -38,13 +38,13 @@ The test assumes CTAM is already running locally. It verifies:
 These are the current BNG-side wrapper inputs for the smoke test, not fully enforced CTAM server-side inputs yet:
 
 - message: `"ctam csha256 smoke"`
-- energy difficulty bits: `0x1d00ffff`
+- energy difficulty: `0x1d00ffff`
 - major CTAM difficulty: the live CTAM `context_size` reported by `GET /health`, provided it is at least `27` (~16 MiB)
 - minor CTAM difficulty: `16` rounds
 
 Current implementation status:
 
-- BNG sends `energy_difficulty_bits`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds` in the JSON payload.
+- BNG sends `energy_difficulty`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds` in the JSON payload.
 - BNG also maps `minor_ctam_difficulty_rounds` onto CTAM's existing `injections` field.
 - The Rust CTAM request DTO now accepts the new energy/major/minor fields.
 - On `POST /crypto/cta_sha256`, only the minor CTAM difficulty currently affects hashing behavior; it is resolved through the existing injections path.

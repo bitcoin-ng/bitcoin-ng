@@ -13,8 +13,8 @@ namespace {
 
 void ValidateDifficultyTriple(const CTAMDifficultyTriple& difficulty)
 {
-    if (difficulty.energy_difficulty_bits == 0) {
-        throw std::runtime_error("CTAM energy difficulty bits must be non-zero");
+    if (difficulty.energy_difficulty == 0) {
+        throw std::runtime_error("CTAM energy difficulty must be non-zero");
     }
     if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
         throw std::runtime_error("CTAM major difficulty must be at least context_size 27 (~16 MiB)");

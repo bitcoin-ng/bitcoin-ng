@@ -94,8 +94,8 @@ class CtamRestClient:
     def cta_sha256(
         self,
         *,
-        message_hex: str,
-        energy_difficulty_bits: int,
+        payload_hex: str,
+        energy_difficulty: int,
         major_ctam_difficulty_context_size: int,
         minor_ctam_difficulty_rounds: int,
         keep_branch: bool = False,
@@ -104,8 +104,8 @@ class CtamRestClient:
             "POST",
             "crypto/cta_sha256",
             {
-                "message_hex": message_hex,
-                "energy_difficulty_bits": energy_difficulty_bits,
+                "payload_hex": payload_hex,
+                "energy_difficulty": energy_difficulty,
                 "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
                 "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
                 "injections": minor_ctam_difficulty_rounds,
@@ -116,11 +116,11 @@ class CtamRestClient:
     def start_mining_job(
         self,
         *,
-        work_bytes_hex: str,
+        payload_hex: str,
         nonce_offset: int,
         nonce_start: int,
         nonce_end: int,
-        energy_difficulty_bits: int,
+        energy_difficulty: int,
         major_ctam_difficulty_context_size: int,
         minor_ctam_difficulty_rounds: int,
         keep_branch: bool = False,
@@ -129,11 +129,11 @@ class CtamRestClient:
             "POST",
             "mining",
             {
-                "work_bytes_hex": work_bytes_hex,
+                "payload_hex": payload_hex,
                 "nonce_offset": nonce_offset,
                 "nonce_start": nonce_start,
                 "nonce_end": nonce_end,
-                "energy_difficulty_bits": energy_difficulty_bits,
+                "energy_difficulty": energy_difficulty,
                 "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
                 "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
                 "keep_branch": keep_branch,
@@ -288,8 +288,8 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
 
             self.log.info("Smoke-test the mock external CTA-SHA256 endpoint")
             digest = ctam.cta_sha256(
-                message_hex="616263",
-                energy_difficulty_bits=0x207FFFFF,
+                payload_hex="616263",
+                energy_difficulty=0x207FFFFF,
                 major_ctam_difficulty_context_size=context_size,
                 minor_ctam_difficulty_rounds=16,
                 keep_branch=False,
@@ -305,18 +305,18 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
             header_bytes[72:76] = (0x207FFFFF).to_bytes(4, "little")
             header_bytes[76:80] = (0).to_bytes(4, "little")
             started = ctam.start_mining_job(
-                work_bytes_hex=header_bytes.hex(),
+                payload_hex=header_bytes.hex(),
                 nonce_offset=76,
                 nonce_start=0,
                 nonce_end=4095,
-                energy_difficulty_bits=0x207FFFFF,
+                energy_difficulty=0x207FFFFF,
                 major_ctam_difficulty_context_size=context_size,
                 minor_ctam_difficulty_rounds=16,
                 keep_branch=False,
             )
             assert_equal(started["status"], "running")
             assert_equal(started["nonce_offset"], 76)
-            assert_equal(started["energy_difficulty_bits"], 0x207FFFFF)
+            assert_equal(started["energy_difficulty"], 0x207FFFFF)
             assert_equal(started["major_ctam_difficulty_context_size"], context_size)
             assert_equal(started["minor_ctam_difficulty_rounds"], 16)
 

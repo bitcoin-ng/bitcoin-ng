@@ -22,8 +22,8 @@
 
 namespace {
 
-constexpr unsigned int DEFAULT_ENERGY_DIFFICULTY_BITS{0x1d00ffff};
-constexpr unsigned int EASY_ENERGY_DIFFICULTY_BITS{0x207fffff};
+constexpr unsigned int DEFAULT_ENERGY_DIFFICULTY{0x1d00ffff};
+constexpr unsigned int EASY_ENERGY_DIFFICULTY{0x207fffff};
 constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
 
 bool CTAMTestsEnabled()
@@ -42,7 +42,7 @@ CTAMClientOptions GetCTAMClientOptions()
 CTAMDifficultyTriple GetTestDifficulty(uint32_t context_size)
 {
     return {
-        .energy_difficulty_bits = DEFAULT_ENERGY_DIFFICULTY_BITS,
+        .energy_difficulty = DEFAULT_ENERGY_DIFFICULTY,
         .major_context_size = context_size,
         .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
@@ -142,7 +142,7 @@ BOOST_AUTO_TEST_CASE(csha256_mining_smoke)
     }
 
     const CTAMDifficultyTriple difficulty{
-        .energy_difficulty_bits = EASY_ENERGY_DIFFICULTY_BITS,
+        .energy_difficulty = EASY_ENERGY_DIFFICULTY,
         .major_context_size = context_size,
         .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
     }
 
     const CTAMDifficultyTriple difficulty{
-        .energy_difficulty_bits = EASY_ENERGY_DIFFICULTY_BITS,
+        .energy_difficulty = EASY_ENERGY_DIFFICULTY,
         .major_context_size = context_size,
         .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
@@ -191,7 +191,7 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
     CBlockHeader header;
     header.nVersion = 4;
     header.nTime = 1'700'000'000;
-    header.nBits = difficulty.energy_difficulty_bits;
+    header.nBits = difficulty.energy_difficulty;
     header.nNonce = 0;
 
     const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(header);
@@ -233,7 +233,7 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
     }
 
     const CTAMDifficultyTriple difficulty{
-        .energy_difficulty_bits = EASY_ENERGY_DIFFICULTY_BITS,
+        .energy_difficulty = EASY_ENERGY_DIFFICULTY,
         .major_context_size = context_size,
         .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
@@ -241,7 +241,7 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
     CBlockHeader header;
     header.nVersion = 4;
     header.nTime = 1'700'000'000;
-    header.nBits = difficulty.energy_difficulty_bits;
+    header.nBits = difficulty.energy_difficulty;
     header.nNonce = 0;
 
     const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(header);
@@ -255,7 +255,7 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
     BOOST_CHECK_EQUAL(started.status, "running");
     BOOST_CHECK(!started.IsTerminal());
     BOOST_CHECK_EQUAL(started.nonce_offset, work.nonce_offset);
-    BOOST_CHECK_EQUAL(started.energy_difficulty_bits, difficulty.energy_difficulty_bits);
+    BOOST_CHECK_EQUAL(started.energy_difficulty, difficulty.energy_difficulty);
     BOOST_CHECK_EQUAL(started.major_context_size, difficulty.major_context_size);
     BOOST_CHECK_EQUAL(started.minor_rounds, difficulty.minor_rounds);
 

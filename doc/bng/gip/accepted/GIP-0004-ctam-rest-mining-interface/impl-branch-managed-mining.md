@@ -138,11 +138,11 @@ If it remains available, treat it as a legacy compatibility endpoint only.
 
 When mining a block, BNG sends CTAM:
 
-- `work_bytes_hex`: serialized block header/work bytes
+- `payload_hex`: serialized block header/work bytes
 - `nonce_offset`: offset of the 4-byte nonce
 - `nonce_start`
 - `nonce_end`
-- `energy_difficulty_bits`: Bitcoin compact target bits
+- `energy_difficulty`: Bitcoin compact target
 - `major_ctam_difficulty_context_size`: expected CTAM context size
 - `minor_ctam_difficulty_rounds`: CTA-SHA256 injection/round difficulty
 - `keep_branch`: `false` unless the `/mining` job explicitly needs to retain a
@@ -276,7 +276,7 @@ The backend should:
 
 1. build exact header work bytes from the candidate block header
 2. set `nonce_offset`
-3. derive `energy_difficulty_bits` from `nBits`
+3. derive `energy_difficulty` from the header compact target
 4. derive the major CTAM context size from live CTAM state or consensus rules
 5. set the minor CTAM difficulty rounds
 6. submit `POST /mining`

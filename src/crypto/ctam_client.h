@@ -27,7 +27,7 @@ struct CTAMDifficultyTriple {
     static constexpr uint8_t CONSENSUS_MINOR_ROUNDS{16};
     static constexpr uint8_t MAX_MINOR_ROUNDS{64};
 
-    unsigned int energy_difficulty_bits;
+    unsigned int energy_difficulty;
     uint32_t major_context_size{DEFAULT_MAJOR_CONTEXT_SIZE};
     uint8_t minor_rounds{CONSENSUS_MINOR_ROUNDS};
 };
@@ -47,7 +47,7 @@ public:
         uint32_t nonce_end;
         uint32_t nonce_offset;
         uint64_t attempts;
-        unsigned int energy_difficulty_bits;
+        unsigned int energy_difficulty;
         uint32_t major_context_size;
         uint8_t minor_rounds;
     };
@@ -64,7 +64,7 @@ public:
         uint32_t nonce_offset;
         uint64_t branch_key;
         bool branch_kept;
-        unsigned int energy_difficulty_bits;
+        unsigned int energy_difficulty;
         uint32_t major_context_size;
         uint8_t minor_rounds;
         uint32_t injections;

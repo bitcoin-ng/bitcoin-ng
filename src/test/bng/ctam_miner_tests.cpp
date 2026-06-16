@@ -32,7 +32,7 @@
 
 namespace {
 
-constexpr uint32_t EASY_ENERGY_DIFFICULTY_BITS{0x207fffff};
+constexpr uint32_t EASY_ENERGY_DIFFICULTY{0x207fffff};
 constexpr uint32_t CTAM_CONTEXT_SIZE{27};
 constexpr uint8_t CTAM_MINOR_ROUNDS{CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS};
 
@@ -200,7 +200,7 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
 {
     const std::string digest = found ? R"("0102030405060708090001020304050607080900010203040506070809000102")" : "null";
     return strprintf(
-        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty_bits":%u,"major_ctam_difficulty_context_size":%u,"minor_ctam_difficulty_rounds":%u,"injections":%u,"rounds":64,"error":null})",
+        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty":%u,"major_ctam_difficulty_context_size":%u,"minor_ctam_difficulty_rounds":%u,"injections":%u,"rounds":64,"error":null})",
         status,
         found ? "true" : "false",
         digest,
@@ -208,7 +208,7 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
         attempts,
         branch_key,
         branch_kept ? "true" : "false",
-        EASY_ENERGY_DIFFICULTY_BITS,
+        EASY_ENERGY_DIFFICULTY,
         CTAM_CONTEXT_SIZE,
         CTAM_MINOR_ROUNDS,
         CTAM_MINOR_ROUNDS);
@@ -221,7 +221,7 @@ CBlockHeader Header()
     header.hashPrevBlock = uint256::ONE;
     header.hashMerkleRoot = uint256::ONE;
     header.nTime = 1'700'000'000;
-    header.nBits = EASY_ENERGY_DIFFICULTY_BITS;
+    header.nBits = EASY_ENERGY_DIFFICULTY;
     header.nNonce = 0;
     return header;
 }
@@ -279,7 +279,7 @@ BOOST_AUTO_TEST_CASE(options_difficulty_and_header_work)
 
     const CBlockHeader header = Header();
     const auto difficulty = node::BuildCtamDifficulty(header, CTAM_CONTEXT_SIZE);
-    BOOST_CHECK_EQUAL(difficulty.energy_difficulty_bits, header.nBits);
+    BOOST_CHECK_EQUAL(difficulty.energy_difficulty, header.nBits);
     BOOST_CHECK_EQUAL(difficulty.major_context_size, CTAM_CONTEXT_SIZE);
     BOOST_CHECK_EQUAL(difficulty.minor_rounds, CTAM_MINOR_ROUNDS);
 
@@ -313,7 +313,8 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(requests[1].path, "/mining");
     const UniValue mining_request = ParseBody(requests[1].body);
     BOOST_CHECK_EQUAL(mining_request["nonce_offset"].getInt<int>(), 76);
-    BOOST_CHECK_EQUAL(mining_request["energy_difficulty_bits"].getInt<int>(), static_cast<int>(EASY_ENERGY_DIFFICULTY_BITS));
+    BOOST_CHECK_EQUAL(mining_request["energy_difficulty"].getInt<int>(), static_cast<int>(EASY_ENERGY_DIFFICULTY));
+    BOOST_CHECK(!mining_request.exists("energy_difficulty_bits"));
     BOOST_CHECK_EQUAL(mining_request["major_ctam_difficulty_context_size"].getInt<int>(), static_cast<int>(CTAM_CONTEXT_SIZE));
     BOOST_CHECK_EQUAL(mining_request["minor_ctam_difficulty_rounds"].getInt<int>(), static_cast<int>(CTAM_MINOR_ROUNDS));
     BOOST_REQUIRE(mining_request["keep_branch"].isBool());

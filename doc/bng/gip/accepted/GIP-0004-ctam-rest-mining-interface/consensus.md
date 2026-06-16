@@ -28,7 +28,7 @@ This note intentionally does not redefine CTAM resize timing or the operational 
 Earlier discussion used `nMemBits` as shorthand for the memory-lane difficulty.
 That is not sufficient for the current CTAM model because the node already treats memory-lane difficulty as a three-part tuple:
 
-- energy difficulty: the inherited Bitcoin compact target bits
+- energy difficulty: the inherited Bitcoin compact target
 - major CTAM difficulty: the required `context_size` exponent
 - minor CTAM difficulty: CTA-SHA256 round count
 
@@ -139,7 +139,7 @@ The first prototype should use CTAM's job-oriented mining API:
 This server-side shape is documented in `ctam/doc/api/07-mining.md`.
 It replaces long blocking HTTP requests with a start/poll/stop worker model, while keeping `POST /crypto/mine_csha256` available only as a synchronous compatibility endpoint.
 
-The activated BNG header may be larger than one 64-byte compression block, but the current CTAM worker accepts `work_bytes_hex` rather than a caller-managed final compression block.
+The activated BNG header may be larger than one 64-byte compression block, but the current CTAM worker accepts `payload_hex` rather than a caller-managed final compression block.
 CTAM writes the nonce into those work bytes, then owns SHA-style padding and internal CTA-SHA256 block splitting.
 That means BNG should no longer precompute a chunk-1 state or translate the header into a final `block_hex` request.
 
@@ -148,10 +148,10 @@ The intended mapping is:
 1. Serialize the full activated header into canonical bytes.
 2. Identify the byte offset of `nNonce` inside those canonical bytes.
 3. Start a CTAM mining job with `POST /mining`, passing:
-  - the canonical activated header bytes as `work_bytes_hex`
+  - the canonical activated header bytes as `payload_hex`
   - the nonce byte offset as `nonce_offset`
   - the requested inclusive nonce range as `nonce_start` and `nonce_end`
-  - the full header difficulty tuple as `energy_difficulty_bits`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds`
+  - the full header difficulty tuple as `energy_difficulty`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds`
   - `keep_branch = false` for ordinary mining unless a debug workflow explicitly needs winning-branch inspection
 4. Poll `GET /mining/{job_id}` until the job reaches `completed`, `stopped`, or `failed`.
 5. If a caller aborts mining work, request cooperative cancellation with `POST /mining/{job_id}/stop` and then poll until the terminal status is visible.
@@ -162,15 +162,15 @@ The concrete server behavior expected by BNG is:
 
 - `POST /mining` starts a job and returns immediately with a `job_id`
 - CTAM supports one running mining job at a time in the phase-1 worker
-- the worker writes each nonce little-endian into `work_bytes_hex` at `nonce_offset`
+- the worker writes each nonce little-endian into `payload_hex` at `nonce_offset`
 - the worker pads and splits the resulting bytes internally before evaluating CTA-SHA256
-- the worker compares each digest against the target derived from `energy_difficulty_bits`
+- the worker compares each digest against the target derived from `energy_difficulty`
 - failed, stopped, and exhausted searches do not retain branches
 - only a winning branch may be retained, and only if `keep_branch` is true
 - starting a second job while one is running returns `409 Conflict`
 
 So the missing implementation is not a server-side nonce loop or a BNG-side compression-chunk adapter.
-The missing implementation is the BNG-side mapping from the canonical activated header to the `work_bytes_hex` request accepted by `POST /mining`, plus polling and cancellation behavior in `CtamRestClient`.
+The missing implementation is the BNG-side mapping from the canonical activated header to the `payload_hex` request accepted by `POST /mining`, plus polling and cancellation behavior in `CtamRestClient`.
 
 The legacy `POST /crypto/mine_csha256` path may remain useful for compatibility tests, but new BNG mining code should treat `/mining` as the normal CTAM mining control surface.
 
@@ -315,7 +315,7 @@ For a block template returned by `interfaces::Mining::createNewBlock()`:
 3. Identify the nonce byte offset inside the serialized header bytes.
 4. Derive the caller's inclusive nonce range from `max_tries`.
 5. Call `m_ctam_client->StartMiningJob(...)` with:
-   - the serialized activated header as `work_bytes_hex`
+   - the serialized activated header as `payload_hex`
    - the nonce offset inside that header
    - the caller's nonce range as `nonce_start` and `nonce_end`
    - the `CTAMDifficultyTriple` derived from the template header
@@ -532,7 +532,7 @@ Changes:
 
 ### Phase 5. CTAM worker integration
 
-- call CTAM's `/mining` worker API with canonical activated header bytes as `work_bytes_hex`
+- call CTAM's `/mining` worker API with canonical activated header bytes as `payload_hex`
 - poll mining jobs until `completed`, `stopped`, or `failed`
 - request cooperative stop when local mining work is interrupted
 - ensure the node can rebuild the exact same work locally for validation
@@ -556,7 +556,7 @@ Minimum coverage for this work should include:
 
 - the first consensus prototype lands directly with an in-process verifier in BNG; CTAM REST is used for mining-side `csha256` execution, not as an external consensus oracle (think of it as a miner-side library call rather than a yes/no verdict from an out-of-process service)
 - CTAM-backed mining starts only after the REST client has synchronized CTAM trunk state to the node's desired chain height; if no persisted CTAM checkpoint is usable, the baseline recovery path is replay from genesis
-- the first nonce-search implementation uses CTAM's `/mining` job API; CTAM already owns nonce enumeration, padding, and internal CTA-SHA256 block splitting over caller-supplied `work_bytes_hex`, so the missing work is the BNG-side header-to-work mapping plus job polling and cancellation
+- the first nonce-search implementation uses CTAM's `/mining` job API; CTAM already owns nonce enumeration, padding, and internal CTA-SHA256 block splitting over caller-supplied `payload_hex`, so the missing work is the BNG-side header-to-work mapping plus job polling and cancellation
 - the inherited SHA256d mining loop is retained only as temporary Bitcoin Core compatibility scaffolding and should not be documented as an enduring BNG consensus lane
 
 ## Summary

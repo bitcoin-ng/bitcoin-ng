@@ -67,10 +67,10 @@ class CtamRestClient:
     def status(self):
         return self.request("GET", "status")
 
-    def cta_sha256(self, *, header_hex: str, nbits: int, context_size: int, clone_from=None):
+    def cta_sha256(self, *, header_hex: str, energy_difficulty: int, context_size: int, clone_from=None):
         payload = {
             "payload_hex": header_hex,
-            "energy_difficulty_bits": nbits,
+            "energy_difficulty": energy_difficulty,
             "major_ctam_difficulty_context_size": context_size,
             "minor_ctam_difficulty_rounds": MINOR_CTAM_DIFFICULTY_ROUNDS,
             "injections": MINOR_CTAM_DIFFICULTY_ROUNDS,
@@ -300,7 +300,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             context_size = ctam.status()["context_size"]
             result = ctam.cta_sha256(
                 header_hex=block["header_hex"],
-                nbits=int(block["bits"], 16),
+                energy_difficulty=int(block["bits"], 16),
                 context_size=context_size,
                 clone_from=branch_key,
             )
@@ -324,7 +324,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             context_size = ctam.status()["context_size"]
             result = ctam.cta_sha256(
                 header_hex=block["header_hex"],
-                nbits=int(block["bits"], 16),
+                energy_difficulty=int(block["bits"], 16),
                 context_size=context_size,
                 clone_from=branch_key,
             )
