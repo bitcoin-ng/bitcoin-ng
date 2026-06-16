@@ -81,6 +81,7 @@ TEST_FRAMEWORK_UNIT_TESTS = 'feature_framework_unit_tests.py'
 EXTENDED_SCRIPTS = [
     # These tests are not run by default.
     # Longest test should go first, to favor running tests in parallel
+    'ctam_mining_flows.py',
     'feature_pruning.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',

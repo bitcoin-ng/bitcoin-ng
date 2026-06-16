@@ -238,3 +238,20 @@ commit winning branch with:
 Then CTAM status becomes anchored from block 1 onward.
 
 So no, we should not create/mine a genesis block. The fix should be: teach `RequireCtamTrunkState` that null BNG metadata is the valid CTAM zero-block state, but only for `expected_height == 0`. Then make sure mined-block commits populate metadata starting at height 1.
+
+--- 
+
+# Genesis and Fast-Forward Scenarios
+
+When CTAM starts with an empty state, it is effectively at a genesis or zero-block state. BNG must be able to handle this situation gracefully, either by allowing CTAM to mine the first block or by fast-forwarding CTAM to match an existing BNG chain prefix. 
+
+When trunk state height is zero or null, we have ctam server in uninitialized state. There are two options that can follow:
+
+1. *genesis*: BNG can mine the first block and commit it to CTAM, which will then set the trunk state to height 1 with the new block hash.
+2. *fast-forward*: CTAM can fast-forward its trunk state to match BNG's current tip, effectively skipping the genesis block mining step.
+
+Below we design the logic for handling the genesis block mining and committing process. Accompanied by fast-forwarding, this ensures that CTAM and BNG remain in sync regarding the chain prefix and trunk state.
+
+First, we need to check about the block-chain state itself. If the BNG chain is at height 0, we can allow CTAM to mine the first block. If the BNG chain is already at a higher height, we should ensure that CTAM's trunk state matches the expected BNG prefix before proceeding with any mining or verification.
+
+See èxtended-tests.md for more details on the genesis and fast-forward scenarios.
