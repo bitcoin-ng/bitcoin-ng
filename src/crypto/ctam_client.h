@@ -104,6 +104,7 @@ public:
     CtaSha256Result PostCtaSha256Message(std::span<const unsigned char> input, const CTAMDifficultyTriple& difficulty, bool keep_branch = false) const;
     CtaSha256Result PostCtaSha256MessageKeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const;
     CommitBranchResult CommitBranch(uint64_t branch_key) const;
+    CommitBranchResult CommitBranch(uint64_t branch_key, uint64_t bng_height, std::string_view bng_block_hash) const;
     StatusResult EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const;
     MiningJob StartMiningJob(std::span<const unsigned char> work_bytes,
                              uint32_t nonce_offset,

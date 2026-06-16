@@ -188,3 +188,53 @@ on found:
 ```
 
 That is the flow-control heart of Step 6. The important design choice is: **BNG remains the authority on which chain prefix is being extended, and CTAM must prove it is aligned before BNG lets any CTAM branch affect mining outcome.**
+
+
+---
+
+## Working on `run-ctam-miner-tests.sh`
+
+> The trunk is pre-initialized with zero block.. I now see that bng_height: null is correct.. like nothing was mined
+
+Got it, yes. If CTAM’s trunk is already initialized as the “zero block,” then `bng_height: null` is not an error. It means “no BNG-mined block has been committed into CTAM yet.”
+
+So the better model is:
+
+```text
+CTAM fresh trunk:
+  trunk_key = 0
+  bng_height = null
+  bng_block_hash = null
+
+Meaning:
+  CTAM is at pre-mining zero block / genesis-equivalent state.
+```
+
+Then BNG should interpret that as valid only when its expected previous tip is the genesis/zero state.
+
+So instead of anchoring CTAM to BNG genesis metadata, the BNG-side check should probably be:
+
+```text
+If expected_height == 0:
+  accept CTAM status with:
+    bng_height == null
+    bng_block_hash == null
+    trunk_key == 0
+
+If expected_height > 0:
+  require:
+    bng_height == expected_height
+    bng_block_hash == expected_hash
+```
+
+And after CTAM mines the first real block:
+
+```text
+commit winning branch with:
+  bng_height = 1
+  bng_block_hash = block1 hash
+```
+
+Then CTAM status becomes anchored from block 1 onward.
+
+So no, we should not create/mine a genesis block. The fix should be: teach `RequireCtamTrunkState` that null BNG metadata is the valid CTAM zero-block state, but only for `expected_height == 0`. Then make sure mined-block commits populate metadata starting at height 1.

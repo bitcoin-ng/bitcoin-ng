@@ -181,6 +181,11 @@ std::string StatusJson(uint64_t bng_height = 0, std::string bng_block_hash = uin
     return strprintf(R"({"ctam_version":"0.1.0","status":"running","context_size":%u,"trunk_key":0,"bng_height":%u,"bng_block_hash":"%s","branch_count":0})", context_size, bng_height, bng_block_hash);
 }
 
+std::string StatusJsonWithoutBngMetadata()
+{
+    return strprintf(R"({"ctam_version":"0.1.0","status":"running","context_size":%u,"trunk_key":0,"bng_height":null,"bng_block_hash":null,"branch_count":0})", CTAM_CONTEXT_SIZE);
+}
+
 std::string StatusJsonWithoutHeight()
 {
     return strprintf(R"({"ctam_version":"0.1.0","status":"running","context_size":%u,"trunk_key":0,"bng_block_hash":"%s","branch_count":0})", CTAM_CONTEXT_SIZE, uint256::ONE.ToString());
@@ -286,10 +291,10 @@ BOOST_AUTO_TEST_CASE(options_difficulty_and_header_work)
 BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
 {
     MockCtamServer server{{
-        {EVHTTP_REQ_GET, "/status", StatusJson()},
+        {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
         {EVHTTP_REQ_POST, "/mining", JobJson("running", false, 42, false, "null", 0)},
         {EVHTTP_REQ_GET, "/mining/1", JobJson("completed", true, 42, true, "7", 8)},
-        {EVHTTP_REQ_GET, "/status", StatusJson()},
+        {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
         {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":43,"branch_kept":false,"injections":16,"rounds":64})"},
         {EVHTTP_REQ_POST, "/branches/42/commit", R"({"status":"committed"})"},
     }};
@@ -316,6 +321,9 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(requests[3].path, "/status");
     BOOST_CHECK_EQUAL(requests[4].path, "/crypto/cta_sha256");
     BOOST_CHECK_EQUAL(requests[5].path, "/branches/42/commit");
+    const UniValue commit_request = ParseBody(requests[5].body);
+    BOOST_CHECK_EQUAL(commit_request["bng_height"].getInt<int>(), 1);
+    BOOST_CHECK_EQUAL(commit_request["bng_block_hash"].get_str(), header.GetHash().ToString());
     BOOST_CHECK(!server.SawUnexpectedRequest());
 }
 
@@ -437,7 +445,7 @@ BOOST_AUTO_TEST_CASE(winning_job_rechecks_ctam_trunk_before_replay_and_commit)
 BOOST_AUTO_TEST_CASE(verify_header_uses_single_nonce_ctam_request_without_retaining_branch)
 {
     MockCtamServer server{{
-        {EVHTTP_REQ_GET, "/status", StatusJson()},
+        {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
         {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":9,"branch_kept":false,"injections":16,"rounds":64})"},
     }};
 

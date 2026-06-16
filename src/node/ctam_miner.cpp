@@ -55,6 +55,11 @@ bool DigestMeetsTarget(const std::array<unsigned char, CtamRestClient::OUTPUT_SI
     return digest <= target;
 }
 
+bool IsCtamZeroBlockState(const CtamRestClient::StatusResult& status)
+{
+    return status.trunk_key == 0 && !status.bng_height && !status.bng_block_hash;
+}
+
 void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expected_height, const uint256& expected_hash, uint32_t expected_context_size)
 {
     if (status.status != "running") {
@@ -65,6 +70,9 @@ void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expec
     }
     if (expected_height < 0) {
         throw std::runtime_error("CTAM trunk state requires a non-negative BNG height");
+    }
+    if (expected_height == 0 && IsCtamZeroBlockState(status)) {
+        return;
     }
     if (!status.bng_height) {
         throw std::runtime_error("CTAM status is missing bng_height; cannot prove trunk state matches BNG chain prefix");
@@ -78,6 +86,15 @@ void RequireCtamTrunkState(const CtamRestClient::StatusResult& status, int expec
     if (*status.bng_block_hash != expected_hash.ToString()) {
         throw std::runtime_error("CTAM trunk block hash does not match expected BNG chain prefix");
     }
+}
+
+bool CtamTrunkMatchesBlock(const CtamRestClient::StatusResult& status, int height, const uint256& hash, uint32_t expected_context_size)
+{
+    if (status.status != "running" || status.context_size != expected_context_size || height < 0) {
+        return false;
+    }
+    return status.bng_height && *status.bng_height == static_cast<uint64_t>(height) &&
+           status.bng_block_hash && *status.bng_block_hash == hash.ToString();
 }
 
 } // namespace
@@ -207,7 +224,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
         throw std::runtime_error("CTAM mining job digest does not satisfy the requested target");
     }
 
-    const auto commit = client.CommitBranch(job.branch_key);
+    const auto commit = client.CommitBranch(job.branch_key, static_cast<uint64_t>(expected_trunk_height + 1), solved_header.GetHash().ToString());
     if (commit.status != "committed") {
         throw std::runtime_error("CTAM winning branch commit failed with status: " + commit.status);
     }
@@ -241,6 +258,9 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_tr
         CtamRestClient client{m_options.client_options};
         const auto status = client.Status();
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
+        if (CtamTrunkMatchesBlock(status, expected_trunk_height + 1, header.GetHash(), difficulty.major_context_size)) {
+            return true;
+        }
         RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
         const auto result = client.PostCtaSha256Message(work.work_bytes, difficulty, /*keep_branch=*/false);

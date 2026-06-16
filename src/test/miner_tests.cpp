@@ -9,6 +9,7 @@
 #include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <interfaces/mining.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <policy/policy.h>
 #include <test/util/random.h>
@@ -755,11 +756,16 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 
         // The block template does not have proof-of-work, so solve it.
         bool solved{false};
-        for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
-            block.nNonce = nonce;
-            if (CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
-                solved = true;
-                break;
+        if (node::CtamMiningBackend{gArgs}.Enabled()) {
+            uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
+            solved = node::CtamMiningBackend{gArgs}.SolveHeader(*Assert(m_node.chainman), block, max_tries);
+        } else {
+            for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
+                block.nNonce = nonce;
+                if (CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+                    solved = true;
+                    break;
+                }
             }
         }
         BOOST_REQUIRE(solved);

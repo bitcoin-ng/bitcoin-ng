@@ -477,6 +477,25 @@ CtamRestClient::CtaSha256Result CtamRestClient::PostCtaSha256MessageKeepBranch(s
     return result;
 }
 
+CtamRestClient::CommitBranchResult CtamRestClient::CommitBranch(uint64_t branch_key, uint64_t bng_height, std::string_view bng_block_hash) const
+{
+    if (branch_key == 0) {
+        throw std::runtime_error("CTAM branch commit requires a non-zero branch key");
+    }
+    if (bng_block_hash.size() != 64) {
+        throw std::runtime_error("CTAM branch commit requires a 64-character BNG block hash");
+    }
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("bng_height", bng_height);
+    payload.pushKV("bng_block_hash", std::string{bng_block_hash});
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "branches/" + std::to_string(branch_key) + "/commit", payload.write());
+    return {
+        .status = RequireJSONString(response, "status", "/branches/{branch_key}/commit"),
+    };
+}
+
 CtamRestClient::CommitBranchResult CtamRestClient::CommitBranch(uint64_t branch_key) const
 {
     if (branch_key == 0) {
