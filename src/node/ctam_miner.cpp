@@ -114,8 +114,8 @@ CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header, uint32_t co
 {
     return {
         .energy_difficulty = header.nBits,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = context_size,
+        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
 }
 
@@ -160,7 +160,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     CtamRestClient client{m_options.client_options};
     const auto status = client.Status();
     const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
-    RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
+    RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_ctam_difficulty_context_size);
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
     const uint32_t nonce_start = header.nNonce;
@@ -208,7 +208,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     }
     
     const auto final_status = client.Status();
-    RequireCtamTrunkState(final_status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
+    RequireCtamTrunkState(final_status, expected_trunk_height, expected_trunk_hash, difficulty.major_ctam_difficulty_context_size);
 
     CBlockHeader solved_header{header};
     solved_header.nNonce = *job.winning_nonce;
@@ -258,10 +258,10 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_tr
         CtamRestClient client{m_options.client_options};
         const auto status = client.Status();
         const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
-        if (CtamTrunkMatchesBlock(status, expected_trunk_height + 1, header.GetHash(), difficulty.major_context_size)) {
+        if (CtamTrunkMatchesBlock(status, expected_trunk_height + 1, header.GetHash(), difficulty.major_ctam_difficulty_context_size)) {
             return true;
         }
-        RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_context_size);
+        RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_ctam_difficulty_context_size);
         const CtamHeaderMiningWork work = BuildHeaderWork(header);
         const auto result = client.PostCtaSha256Message(work.work_bytes, difficulty, /*keep_branch=*/false);
         if (result.branch_kept) {

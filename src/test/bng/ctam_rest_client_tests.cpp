@@ -43,8 +43,8 @@ CTAMDifficultyTriple GetTestDifficulty(uint32_t context_size)
 {
     return {
         .energy_difficulty = DEFAULT_ENERGY_DIFFICULTY,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = context_size,
+        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
 }
 
@@ -112,7 +112,7 @@ BOOST_AUTO_TEST_CASE(status_and_kept_branch_commit_smoke)
     BOOST_CHECK(std::any_of(replay.digest.begin(), replay.digest.end(), [](unsigned char byte) { return byte != 0; }));
     BOOST_CHECK_GT(replay.branch_key, 0U);
     BOOST_CHECK(replay.branch_kept);
-    BOOST_CHECK_EQUAL(replay.injections, difficulty.minor_rounds);
+    BOOST_CHECK_EQUAL(replay.injection_rounds_difficulty, difficulty.minor_ctam_difficulty_rounds);
 
     const auto commit = client.CommitBranch(replay.branch_key);
     BOOST_CHECK_EQUAL(commit.status, "committed");
@@ -143,8 +143,8 @@ BOOST_AUTO_TEST_CASE(csha256_mining_smoke)
 
     const CTAMDifficultyTriple difficulty{
         .energy_difficulty = EASY_ENERGY_DIFFICULTY,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = context_size,
+        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
 
     std::array<unsigned char, 16> work_bytes{};
@@ -184,8 +184,8 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
 
     const CTAMDifficultyTriple difficulty{
         .energy_difficulty = EASY_ENERGY_DIFFICULTY,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = context_size,
+        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
 
     CBlockHeader header;
@@ -234,8 +234,8 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
 
     const CTAMDifficultyTriple difficulty{
         .energy_difficulty = EASY_ENERGY_DIFFICULTY,
-        .major_context_size = context_size,
-        .minor_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = context_size,
+        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
     };
 
     CBlockHeader header;
@@ -256,8 +256,8 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
     BOOST_CHECK(!started.IsTerminal());
     BOOST_CHECK_EQUAL(started.nonce_offset, work.nonce_offset);
     BOOST_CHECK_EQUAL(started.energy_difficulty, difficulty.energy_difficulty);
-    BOOST_CHECK_EQUAL(started.major_context_size, difficulty.major_context_size);
-    BOOST_CHECK_EQUAL(started.minor_rounds, difficulty.minor_rounds);
+    BOOST_CHECK_EQUAL(started.major_ctam_difficulty_context_size, difficulty.major_ctam_difficulty_context_size);
+    BOOST_CHECK_EQUAL(started.minor_ctam_difficulty_rounds, difficulty.minor_ctam_difficulty_rounds);
 
     CtamRestClient::MiningJob job = started;
     for (int i = 0; i < 100 && !job.IsTerminal(); ++i) {

@@ -200,7 +200,7 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
 {
     const std::string digest = found ? R"("0102030405060708090001020304050607080900010203040506070809000102")" : "null";
     return strprintf(
-        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty":%u,"major_ctam_difficulty_context_size":%u,"minor_ctam_difficulty_rounds":%u,"injections":%u,"rounds":64,"error":null})",
+        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty":%u,"context_size_difficulty":%u,"injection_rounds_difficulty":%u,"rounds":64,"error":null})",
         status,
         found ? "true" : "false",
         digest,
@@ -210,7 +210,6 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
         branch_kept ? "true" : "false",
         EASY_ENERGY_DIFFICULTY,
         CTAM_CONTEXT_SIZE,
-        CTAM_MINOR_ROUNDS,
         CTAM_MINOR_ROUNDS);
 }
 
@@ -287,8 +286,8 @@ BOOST_AUTO_TEST_CASE(options_difficulty_and_header_work)
     const CBlockHeader header = Header();
     const auto difficulty = node::BuildCtamDifficulty(header, CTAM_CONTEXT_SIZE);
     BOOST_CHECK_EQUAL(difficulty.energy_difficulty, header.nBits);
-    BOOST_CHECK_EQUAL(difficulty.major_context_size, CTAM_CONTEXT_SIZE);
-    BOOST_CHECK_EQUAL(difficulty.minor_rounds, CTAM_MINOR_ROUNDS);
+    BOOST_CHECK_EQUAL(difficulty.major_ctam_difficulty_context_size, CTAM_CONTEXT_SIZE);
+    BOOST_CHECK_EQUAL(difficulty.minor_ctam_difficulty_rounds, CTAM_MINOR_ROUNDS);
 
     const auto work = node::CtamMiningBackend{args}.BuildHeaderWork(header);
     BOOST_CHECK_EQUAL(work.work_bytes.size(), 80U);
@@ -302,7 +301,7 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
         {EVHTTP_REQ_POST, "/mining", JobJson("running", false, 42, false, "null", 0)},
         {EVHTTP_REQ_GET, "/mining/1", JobJson("completed", true, 42, true, "7", 8)},
         {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
-        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":43,"branch_kept":false,"injections":16,"rounds":64})"},
+        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":43,"branch_kept":false,"injection_rounds_difficulty":16,"rounds":64})"},
         {EVHTTP_REQ_POST, "/branches/42/commit", R"({"status":"committed"})"},
     }};
 
@@ -327,8 +326,8 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(mining_request["nonce_offset"].getInt<int>(), 76);
     BOOST_CHECK_EQUAL(mining_request["energy_difficulty"].getInt<int>(), static_cast<int>(EASY_ENERGY_DIFFICULTY));
     BOOST_CHECK(!mining_request.exists("energy_difficulty_bits"));
-    BOOST_CHECK_EQUAL(mining_request["major_ctam_difficulty_context_size"].getInt<int>(), static_cast<int>(CTAM_CONTEXT_SIZE));
-    BOOST_CHECK_EQUAL(mining_request["minor_ctam_difficulty_rounds"].getInt<int>(), static_cast<int>(CTAM_MINOR_ROUNDS));
+    BOOST_CHECK_EQUAL(mining_request["context_size_difficulty"].getInt<int>(), static_cast<int>(CTAM_CONTEXT_SIZE));
+    BOOST_CHECK_EQUAL(mining_request["injection_rounds_difficulty"].getInt<int>(), static_cast<int>(CTAM_MINOR_ROUNDS));
     BOOST_REQUIRE(mining_request["keep_branch"].isBool());
     BOOST_CHECK(mining_request["keep_branch"].get_bool());
     BOOST_CHECK_EQUAL(requests[3].path, "/status");
@@ -497,7 +496,7 @@ BOOST_AUTO_TEST_CASE(verify_header_uses_single_nonce_ctam_request_without_retain
 {
     MockCtamServer server{{
         {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
-        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":9,"branch_kept":false,"injections":16,"rounds":64})"},
+        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":9,"branch_kept":false,"injection_rounds_difficulty":16,"rounds":64})"},
     }};
 
     const CBlockHeader header = Header();

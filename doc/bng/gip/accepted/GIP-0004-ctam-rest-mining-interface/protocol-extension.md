@@ -70,7 +70,7 @@ For protocol purposes, `GET /admin/context-size` is the authoritative completion
 4. Both the node and the CTAM server invalidate any outstanding mining work that was prepared under the old major difficulty.
 5. The node polls `GET /status` and `GET /admin/context-size` until CTAM is responsive and the target `context_size` is live.
 6. CTAM persists the resized state before reporting the new `context_size` as active.
-7. The node starts fresh mining work and includes the updated `major_ctam_difficulty_context_size` in `POST /crypto/cta_sha256` or `POST /crypto/mine_csha256`.
+7. The node starts fresh mining work and includes the updated `context_size_difficulty` in `POST /crypto/cta_sha256` or `POST /crypto/mine_csha256`.
 8. The crypto endpoint rejects the request if the caller's major difficulty still does not match the live CTAM state.
 
 This keeps resizing explicit, observable, and separate from the hot mining path.
@@ -118,7 +118,7 @@ After a resize has been applied:
 
 - `POST /crypto/cta_sha256` may still be used as a single-evaluation helper.
 - `POST /crypto/mine_csha256` remains the mining-oriented endpoint.
-- Both endpoints must validate `major_ctam_difficulty_context_size` against the live machine state.
+- Both endpoints must validate `context_size_difficulty` against the live machine state.
 - Neither endpoint should trigger a resize implicitly.
 
 This matches the rule already described in CTAM's mining note: disagreement about major difficulty is a protocol mismatch, not a signal to mutate local state.

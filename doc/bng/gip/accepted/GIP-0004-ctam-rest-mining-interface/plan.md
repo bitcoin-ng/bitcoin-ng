@@ -49,7 +49,7 @@ For BNG, the wrapper should expose a difficulty triple rather than a single inje
 - major CTAM difficulty: the expected CTAM `context_size` exponent, with an initial floor of `27` (about 16 MiB of state, which stays above the current CTAM-side note of roughly 12.5 MiB)
 - minor CTAM difficulty: the consensus-fixed CTA-SHA256 round injection count, set to 16  and fixed as part of BNG consensus parameters (to be coded in chainparams.cpp)
 
-While CTAM still exposes `injections` today, BNG should treat that field as the transport encoding of the minor CTAM difficulty instead of the public mining API.
+While CTAM still exposes legacy injection aliases during the transition, BNG should treat the new `injection_rounds_difficulty` field as the public mining API.
 
 This wrapper should be treated as a development and parity tool, not as a drop-in replacement for every `CSHA256` call site (in the future, REST is to be upgraded to shared memory - this needs a separate GIP). It is appropriate for:
 - mining-lane experiments

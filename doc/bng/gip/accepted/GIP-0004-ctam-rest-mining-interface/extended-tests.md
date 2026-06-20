@@ -54,9 +54,8 @@ The `POST /crypto/cta_sha256` payload should use the CTAM DTO field names:
 {
   "payload_hex": "<80-byte-header-hex>",
   "energy_difficulty": <compact_target>,
-  "major_ctam_difficulty_context_size": <status.context_size>,
-  "minor_ctam_difficulty_rounds": 16,
-  "injections": 16,
+  "context_size_difficulty": <status.context_size>,
+  "injection_rounds_difficulty": 16,
   "keep_branch": true,
   "clone_from": <optional-branch-key>
 }

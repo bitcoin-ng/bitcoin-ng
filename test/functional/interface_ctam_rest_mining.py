@@ -106,9 +106,8 @@ class CtamRestClient:
             {
                 "payload_hex": payload_hex,
                 "energy_difficulty": energy_difficulty,
-                "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
-                "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
-                "injections": minor_ctam_difficulty_rounds,
+                "context_size_difficulty": major_ctam_difficulty_context_size,
+                "injection_rounds_difficulty": minor_ctam_difficulty_rounds,
                 "keep_branch": keep_branch,
             },
         )
@@ -134,8 +133,8 @@ class CtamRestClient:
                 "nonce_start": nonce_start,
                 "nonce_end": nonce_end,
                 "energy_difficulty": energy_difficulty,
-                "major_ctam_difficulty_context_size": major_ctam_difficulty_context_size,
-                "minor_ctam_difficulty_rounds": minor_ctam_difficulty_rounds,
+                "context_size_difficulty": major_ctam_difficulty_context_size,
+                "injection_rounds_difficulty": minor_ctam_difficulty_rounds,
                 "keep_branch": keep_branch,
             },
         )
@@ -295,7 +294,7 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
                 keep_branch=False,
             )
             assert_equal(digest["branch_kept"], False)
-            assert_equal(digest["injections"], 16)
+            assert_equal(digest["injection_rounds_difficulty"], 16)
             assert_equal(len(digest["digest_hex"]), 64)
 
             self.log.info("Start and poll a CTAM /mining worker job over node-owned work bytes")
@@ -317,8 +316,8 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
             assert_equal(started["status"], "running")
             assert_equal(started["nonce_offset"], 76)
             assert_equal(started["energy_difficulty"], 0x207FFFFF)
-            assert_equal(started["major_ctam_difficulty_context_size"], context_size)
-            assert_equal(started["minor_ctam_difficulty_rounds"], 16)
+            assert_equal(started["context_size_difficulty"], context_size)
+            assert_equal(started["injection_rounds_difficulty"], 16)
 
             job = ctam.wait_for_mining_job(started["job_id"])
             assert_equal(job["status"], "completed")

@@ -16,12 +16,12 @@ GIP-0004 implementation changes so far
    - minor CTAM difficulty: consensus-fixed CTA-SHA256 rounds, currently fixed to 16
    - BNG now treats `context_size = 27` (~16 MiB) as the initial lower bound for the major CTAM difficulty, replacing the older byte-based floor wording.
 
-4. Kept CTAM transport compatibility by mapping the BNG minor CTAM difficulty onto CTAM's current `injections` request field.
-   - BNG also sends energy and major difficulty fields in the request payload.
-   - The Rust CTAM server now accepts typed energy/major/minor request fields.
-   - `POST /crypto/cta_sha256` still resolves hashing behavior through the minor difficulty / injections path.
+4. Kept CTAM transport compatibility by mapping the BNG injection-round difficulty onto CTAM's `injection_rounds_difficulty` request field.
+   - BNG also sends energy and context-size difficulty fields in the request payload.
+   - The Rust CTAM server now accepts typed energy/context-size/injection-round request fields.
+   - `POST /crypto/cta_sha256` still resolves hashing behavior through the injection-round difficulty path.
    - `POST /crypto/mine_csha256` now uses the energy difficulty for nonce-range mining.
-   - The major CTAM difficulty is now sent as `major_ctam_difficulty_context_size` and must match CTAM's live `context_size`.
+   - The CTAM context-size difficulty is now sent as `context_size_difficulty` and must match CTAM's live `context_size`.
 
 5. Added CTAM-gated unit-test arguments to the test framework.
    Flags:

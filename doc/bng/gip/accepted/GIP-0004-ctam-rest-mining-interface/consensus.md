@@ -151,7 +151,7 @@ The intended mapping is:
   - the canonical activated header bytes as `payload_hex`
   - the nonce byte offset as `nonce_offset`
   - the requested inclusive nonce range as `nonce_start` and `nonce_end`
-  - the full header difficulty tuple as `energy_difficulty`, `major_ctam_difficulty_context_size`, and `minor_ctam_difficulty_rounds`
+  - the full header difficulty tuple as `energy_difficulty`, `context_size_difficulty`, and `injection_rounds_difficulty`
   - `keep_branch = false` for ordinary mining unless a debug workflow explicitly needs winning-branch inspection
 4. Poll `GET /mining/{job_id}` until the job reaches `completed`, `stopped`, or `failed`.
 5. If a caller aborts mining work, request cooperative cancellation with `POST /mining/{job_id}/stop` and then poll until the terminal status is visible.

@@ -72,9 +72,8 @@ class CtamRestClient:
         payload = {
             "payload_hex": header_hex,
             "energy_difficulty": energy_difficulty,
-            "major_ctam_difficulty_context_size": context_size,
-            "minor_ctam_difficulty_rounds": MINOR_CTAM_DIFFICULTY_ROUNDS,
-            "injections": MINOR_CTAM_DIFFICULTY_ROUNDS,
+            "context_size_difficulty": context_size,
+            "injection_rounds_difficulty": MINOR_CTAM_DIFFICULTY_ROUNDS,
             "keep_branch": True,
         }
         if clone_from is not None:

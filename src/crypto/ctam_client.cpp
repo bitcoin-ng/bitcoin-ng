@@ -132,13 +132,13 @@ void ValidateDifficultyTriple(const CTAMDifficultyTriple& difficulty)
     if (difficulty.energy_difficulty == 0) {
         throw std::runtime_error("CTAM energy difficulty must be non-zero");
     }
-    if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+    if (difficulty.major_ctam_difficulty_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
         throw std::runtime_error("CTAM major difficulty must be at least context_size 27 (~16 MiB)");
     }
-    if (difficulty.minor_rounds != CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS) {
+    if (difficulty.minor_ctam_difficulty_rounds != CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS) {
         throw std::runtime_error("CTAM minor difficulty must match the consensus round count");
     }
-    if (difficulty.minor_rounds > CTAMDifficultyTriple::MAX_MINOR_ROUNDS) {
+    if (difficulty.minor_ctam_difficulty_rounds > CTAMDifficultyTriple::MAX_MINOR_ROUNDS) {
         throw std::runtime_error("CTAM minor difficulty exceeds the SHA-256 round limit");
     }
 }
@@ -177,9 +177,8 @@ UniValue BuildMiningPayload(std::span<const unsigned char> work_bytes,
     payload.pushKV("nonce_start", nonce_start);
     payload.pushKV("nonce_end", nonce_end);
     payload.pushKV("energy_difficulty", difficulty.energy_difficulty);
-    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
-    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
-    payload.pushKV("injections", difficulty.minor_rounds);
+    payload.pushKV("context_size_difficulty", difficulty.major_ctam_difficulty_context_size);
+    payload.pushKV("injection_rounds_difficulty", difficulty.minor_ctam_difficulty_rounds);
     payload.pushKV("keep_branch", keep_branch);
     if (!initial_state.empty()) {
         payload.pushKV("initial_state_hex", HexStr(initial_state));
@@ -294,9 +293,9 @@ std::optional<uint32_t> ParseOptionalNonce(const UniValue& response, std::string
 
 CtamRestClient::MiningJob ParseMiningJob(const UniValue& response, std::string_view endpoint)
 {
-    const uint32_t minor_rounds = RequireJSONUInt32(response, "minor_ctam_difficulty_rounds", endpoint);
+    const uint32_t minor_rounds = RequireJSONUInt32(response, "injection_rounds_difficulty", endpoint);
     if (minor_rounds > CTAMDifficultyTriple::MAX_MINOR_ROUNDS) {
-        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned out-of-range minor_ctam_difficulty_rounds");
+        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned out-of-range injection_rounds_difficulty");
     }
 
     CtamRestClient::MiningJob job{
@@ -312,9 +311,9 @@ CtamRestClient::MiningJob ParseMiningJob(const UniValue& response, std::string_v
         .branch_key = RequireJSONUInt64(response, "branch_key", endpoint),
         .branch_kept = RequireJSONBool(response, "branch_kept", endpoint),
         .energy_difficulty = RequireJSONUInt32(response, "energy_difficulty", endpoint),
-        .major_context_size = RequireJSONUInt32(response, "major_ctam_difficulty_context_size", endpoint),
-        .minor_rounds = static_cast<uint8_t>(minor_rounds),
-        .injections = RequireJSONUInt32(response, "injections", endpoint),
+        .major_ctam_difficulty_context_size = RequireJSONUInt32(response, "context_size_difficulty", endpoint),
+        .minor_ctam_difficulty_rounds = static_cast<uint8_t>(minor_rounds),
+        .injection_rounds_difficulty = RequireJSONUInt32(response, "injection_rounds_difficulty", endpoint),
         .rounds = RequireJSONUInt32(response, "rounds", endpoint),
         .error = std::nullopt,
     };
@@ -324,9 +323,6 @@ CtamRestClient::MiningJob ParseMiningJob(const UniValue& response, std::string_v
             throw std::runtime_error("CTAM " + std::string(endpoint) + " returned a non-string error");
         }
         job.error = response["error"].get_str();
-    }
-    if (job.minor_rounds != job.injections) {
-        throw std::runtime_error("CTAM " + std::string(endpoint) + " returned mismatched minor rounds and injections");
     }
     if (job.found && (!job.digest.has_value() || !job.winning_nonce.has_value())) {
         throw std::runtime_error("CTAM " + std::string(endpoint) + " reported a solution without digest or winning_nonce");
@@ -362,7 +358,7 @@ CtamRestClient::CtaSha256Result ParseCtaSha256Result(const UniValue& response, s
         .digest = *digest,
         .branch_key = RequireJSONUInt64(response, "branch_key", endpoint),
         .branch_kept = RequireJSONBool(response, "branch_kept", endpoint),
-        .injections = RequireJSONUInt32(response, "injections", endpoint),
+        .injection_rounds_difficulty = RequireJSONUInt32(response, "injection_rounds_difficulty", endpoint),
         .rounds = RequireJSONUInt32(response, "rounds", endpoint),
     };
 }
@@ -449,15 +445,14 @@ CtamRestClient::CtaSha256Result CtamRestClient::PostCtaSha256Message(std::span<c
     UniValue payload(UniValue::VOBJ);
     payload.pushKV("payload_hex", HexStr(message));
     payload.pushKV("energy_difficulty", difficulty.energy_difficulty);
-    payload.pushKV("major_ctam_difficulty_context_size", difficulty.major_context_size);
-    payload.pushKV("minor_ctam_difficulty_rounds", difficulty.minor_rounds);
-    payload.pushKV("injections", difficulty.minor_rounds);
+    payload.pushKV("context_size_difficulty", difficulty.major_ctam_difficulty_context_size);
+    payload.pushKV("injection_rounds_difficulty", difficulty.minor_ctam_difficulty_rounds);
     payload.pushKV("keep_branch", keep_branch);
 
     const UniValue response = RequestJSON(EVHTTP_REQ_POST, "crypto/cta_sha256", payload.write());
     CtaSha256Result result = ParseCtaSha256Result(response, "/crypto/cta_sha256");
-    if (result.injections != difficulty.minor_rounds) {
-        throw std::runtime_error("CTAM /crypto/cta_sha256 returned injections metadata that does not match the request");
+    if (result.injection_rounds_difficulty != difficulty.minor_ctam_difficulty_rounds) {
+        throw std::runtime_error("CTAM /crypto/cta_sha256 returned injection_rounds_difficulty metadata that does not match the request");
     }
 
     return result;
@@ -516,10 +511,10 @@ CtamRestClient::StatusResult CtamRestClient::EnsureReadyForMining(const CTAMDiff
     if (status.status != "running") {
         throw std::runtime_error("CTAM status is not running");
     }
-    if (status.context_size < difficulty.major_context_size) {
+    if (status.context_size < difficulty.major_ctam_difficulty_context_size) {
         throw std::runtime_error("CTAM context_size is below the requested major difficulty");
     }
-    if (difficulty.major_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+    if (difficulty.major_ctam_difficulty_context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
         throw std::runtime_error("CTAM major difficulty is below the BNG consensus minimum");
     }
     return status;
@@ -544,8 +539,8 @@ CtamRestClient::MiningJob CtamRestClient::StartMiningJob(std::span<const unsigne
         throw std::runtime_error("CTAM /mining returned nonce metadata that does not match the request");
     }
     if (job.energy_difficulty != difficulty.energy_difficulty ||
-        job.major_context_size != difficulty.major_context_size ||
-        job.minor_rounds != difficulty.minor_rounds) {
+        job.major_ctam_difficulty_context_size != difficulty.major_ctam_difficulty_context_size ||
+        job.minor_ctam_difficulty_rounds != difficulty.minor_ctam_difficulty_rounds) {
         throw std::runtime_error("CTAM /mining returned a difficulty tuple that does not match the request");
     }
 
@@ -617,8 +612,8 @@ CtamRestClient::MineResult CtamRestClient::MineCSHA256(std::span<const unsigned 
         .nonce_offset = nonce_offset,
         .attempts = static_cast<uint64_t>(response["attempts"].getInt<int64_t>()),
         .energy_difficulty = difficulty.energy_difficulty,
-        .major_context_size = difficulty.major_context_size,
-        .minor_rounds = difficulty.minor_rounds,
+        .major_ctam_difficulty_context_size = difficulty.major_ctam_difficulty_context_size,
+        .minor_ctam_difficulty_rounds = difficulty.minor_ctam_difficulty_rounds,
     };
 
     if (response.exists("digest_hex") && !response["digest_hex"].isNull()) {

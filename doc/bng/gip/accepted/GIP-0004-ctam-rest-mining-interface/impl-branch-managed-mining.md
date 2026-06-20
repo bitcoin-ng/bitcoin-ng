@@ -143,8 +143,8 @@ When mining a block, BNG sends CTAM:
 - `nonce_start`
 - `nonce_end`
 - `energy_difficulty`: Bitcoin compact target
-- `major_ctam_difficulty_context_size`: expected CTAM context size
-- `minor_ctam_difficulty_rounds`: CTA-SHA256 injection/round difficulty
+- `context_size_difficulty`: expected CTAM context size
+- `injection_rounds_difficulty`: CTA-SHA256 injection/round difficulty
 - `keep_branch`: `false` unless the `/mining` job explicitly needs to retain a
   candidate branch for BNG-controlled winner acceptance
 
