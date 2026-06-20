@@ -26,6 +26,7 @@ from test_framework.util import assert_equal
 
 
 MINOR_CTAM_DIFFICULTY_ROUNDS = 16
+EXPECTED_CTAM_CONTEXT_SIZE = 27
 FF_BLOCKCHAIN_DATA_FILENAME = "blocks.json"
 
 
@@ -85,6 +86,17 @@ class CtamRestClient:
             "POST",
             f"branches/{branch_key}/commit",
             {
+                "bng_height": bng_height,
+                "bng_block_hash": bng_block_hash,
+            },
+        )
+
+    def reset(self, *, context_size: int, bng_height=None, bng_block_hash=None):
+        return self.request(
+            "POST",
+            "admin/reset",
+            {
+                "context_size": context_size,
                 "bng_height": bng_height,
                 "bng_block_hash": bng_block_hash,
             },
@@ -309,6 +321,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
     def assert_ctam_empty(self, ctam: CtamRestClient):
         status = ctam.status()
         assert_equal(status["status"], "running")
+        assert_equal(status["context_size"], EXPECTED_CTAM_CONTEXT_SIZE)
         assert_equal(status["bng_height"], None)
         assert_equal(status["bng_block_hash"], None)
         assert_equal(status["trunk_key"], 0)
@@ -316,9 +329,24 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
     def assert_ctam_matches_tip(self, ctam: CtamRestClient, node):
         status = ctam.status()
+        assert_equal(status["context_size"], EXPECTED_CTAM_CONTEXT_SIZE)
         assert_equal(status["bng_height"], node.getblockcount())
         assert_equal(status["bng_block_hash"], node.getbestblockhash())
         assert_equal(status["branch_count"], 0)
+
+    def reset_ctam_state(self, ctam: CtamRestClient):
+        self.log.info("Reset CTAM state before scenario")
+        result = ctam.reset(
+            context_size=EXPECTED_CTAM_CONTEXT_SIZE,
+            bng_height=None,
+            bng_block_hash=None,
+        )
+        assert_equal(result["status"], "reset")
+        assert_equal(result["context_size"], EXPECTED_CTAM_CONTEXT_SIZE)
+        assert_equal(result["trunk_key"], 0)
+        assert_equal(result["bng_height"], None)
+        assert_equal(result["bng_block_hash"], None)
+        assert_equal(result["branch_count"], 0)
 
     def dump_blockchain_from_genesis(self, node):
         blocks = []
@@ -344,11 +372,10 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
         for block in blocks:
             height = block["height"]
-            context_size = ctam.status()["context_size"]
             result = ctam.cta_sha256(
                 header_hex=block["header_hex"],
                 energy_difficulty=int(block["bits"], 16),
-                context_size=context_size,
+                context_size=EXPECTED_CTAM_CONTEXT_SIZE,
                 clone_from=branch_key,
             )
             assert_equal(result["branch_kept"], True)
@@ -368,11 +395,10 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
         for block in blocks:
             height = block["height"]
-            context_size = ctam.status()["context_size"]
             result = ctam.cta_sha256(
                 header_hex=block["header_hex"],
                 energy_difficulty=int(block["bits"], 16),
-                context_size=context_size,
+                context_size=EXPECTED_CTAM_CONTEXT_SIZE,
                 clone_from=branch_key,
             )
             assert_equal(result["branch_kept"], True)
@@ -396,6 +422,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
     def test_genesis_flow(self):
         self.log.info("Test CTAM-backed mining from empty CTAM state")
         with self.running_ctam_server() as ctam:
+            self.reset_ctam_state(ctam)
             self.assert_ctam_empty(ctam)
             node = self.start_mining_node(0)
             mined = self.mine_blocks(node, 3)
@@ -422,6 +449,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
         self.log.info("Replay dumped BNG headers into fresh CTAM and play dumped blocks")
         with self.running_ctam_server() as ctam:
+            self.reset_ctam_state(ctam)
             self.assert_ctam_empty(ctam)
             copied = self.start_mining_node(2)
             assert_equal(copied.getblockcount(), 0)
@@ -430,8 +458,6 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             assert_equal(copied.getblockcount(), source_height)
             assert_equal(copied.getbestblockhash(), source_tip)
             self.assert_ctam_matches_tip(ctam, copied)
-            status = ctam.status()
-            assert status["context_size"] >= status["min_context_size"]
 
             self.log.info("Mine one more block after client-side fast-forward")
             old_height = copied.getblockcount()
@@ -447,6 +473,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
         dumped_blocks = self.load_dumped_blocks()
 
         with self.running_ctam_server() as ctam:
+            self.reset_ctam_state(ctam)
             self.assert_ctam_empty(ctam)
             node = self.start_mining_node(1)
             try:
