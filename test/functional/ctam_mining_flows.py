@@ -106,7 +106,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):
-        if self.using_external_ctam_server():
+        if self.ctam_server_is_available():
             return
 
         ctam_repo = self.ctam_repo()
@@ -129,6 +129,20 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
     @classmethod
     def using_external_ctam_server(cls):
         return cls.CTAM_REST_URL_ENV in os.environ
+
+    def ctam_server_is_available(self):
+        if self.using_external_ctam_server():
+            return True
+
+        parsed_url = urlparse(self.ctam_url())
+        if not self.port_in_use(parsed_url.hostname, parsed_url.port):
+            return False
+
+        try:
+            health = CtamRestClient(self.ctam_url()).health()
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            return False
+        return isinstance(health, dict) and health.get("test") == "ok"
 
     @classmethod
     def ctam_node_args(cls):
@@ -213,7 +227,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
     @contextmanager
     def running_ctam_server(self):
-        if self.using_external_ctam_server():
+        if self.ctam_server_is_available():
             client = CtamRestClient(self.ctam_url())
             if not client.wait_for_server():
                 raise AssertionError(f"External CTAM server did not become healthy at {self.ctam_url()}")
