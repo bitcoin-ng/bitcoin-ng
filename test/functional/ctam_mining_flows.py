@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from test_framework.test_framework import BitcoinTestFramework, SkipTest
@@ -95,6 +95,8 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
     CTAM_HOST = "127.0.0.1"
     CTAM_PORT = 8080
     CTAM_URL = f"http://{CTAM_HOST}:{CTAM_PORT}/"
+    CTAM_REST_URL_ENV = "CTAM_REST_URL"
+    TEST_SELECTOR_ENV = "CTAM_MINING_FLOW_TEST"
 
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -104,23 +106,35 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
         self.supports_cli = False
 
     def skip_test_if_missing_module(self):
+        if self.using_external_ctam_server():
+            return
+
         ctam_repo = self.ctam_repo()
         ctam_binary = ctam_repo / "target" / "debug" / "ctam"
         if not ctam_repo.is_dir():
             raise SkipTest(f"CTAM repo not found at {ctam_repo}")
         if shutil.which("cargo") is None and not (ctam_binary.exists() and os.access(ctam_binary, os.X_OK)):
             raise SkipTest("cargo or a built ctam binary is required")
-        if self.port_in_use(self.CTAM_HOST, self.CTAM_PORT):
-            raise SkipTest(f"{self.CTAM_HOST}:{self.CTAM_PORT} is already in use")
+        parsed_url = urlparse(self.ctam_url())
+        if self.port_in_use(parsed_url.hostname, parsed_url.port):
+            raise SkipTest(f"{parsed_url.hostname}:{parsed_url.port} is already in use")
 
     def setup_network(self):
         self.add_nodes(self.num_nodes, self.extra_args)
 
     @classmethod
+    def ctam_url(cls):
+        return os.environ.get(cls.CTAM_REST_URL_ENV, cls.CTAM_URL)
+
+    @classmethod
+    def using_external_ctam_server(cls):
+        return cls.CTAM_REST_URL_ENV in os.environ
+
+    @classmethod
     def ctam_node_args(cls):
         return [
             "-ctammining=1",
-            f"-ctamresturl={cls.CTAM_URL}",
+            f"-ctamresturl={cls.ctam_url()}",
             "-fallbackfee=0.0002",
         ]
 
@@ -129,17 +143,18 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
         return Path(os.environ.get("CTAM_REPO_ROOT", default_repo))
 
     def ff_blockchain_data_dir(self) -> Path:
-        default_dir = Path(__file__).resolve().parent / "data" / "ctam_fast_forward_blocks"
+        default_dir = Path(__file__).resolve().parent / "data" / "fastforward_blockchain"
         return Path(os.environ.get("CTAM_FF_BLOCKCHAIN_DATA_DIR", default_dir))
 
     def ff_blockchain_data_path(self) -> Path:
         return self.ff_blockchain_data_dir() / FF_BLOCKCHAIN_DATA_FILENAME
 
     def ff_blockchain_data_exists(self) -> bool:
-        return self.ff_blockchain_data_dir().is_dir()
+        return self.ff_blockchain_data_path().is_file()
 
     def save_dumped_blocks(self, blocks) -> None:
         path = self.ff_blockchain_data_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"blocks": blocks}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def load_dumped_blocks(self):
@@ -188,10 +203,18 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
     @contextmanager
     def running_ctam_server(self):
+        if self.using_external_ctam_server():
+            client = CtamRestClient(self.ctam_url())
+            if not client.wait_for_server():
+                raise AssertionError(f"External CTAM server did not become healthy at {self.ctam_url()}")
+            self.log.info("Using externally managed CTAM REST server at %s", self.ctam_url())
+            yield client
+            return
+
         with tempfile.TemporaryDirectory(prefix="ctam-state-") as state_dir:
             log_path = Path(state_dir) / "ctam_server.log"
             command = self.ctam_command(state_dir)
-            client = CtamRestClient(self.CTAM_URL)
+            client = CtamRestClient(self.ctam_url())
             env = os.environ.copy()
             env.setdefault("RUST_LOG", "info")
 
@@ -360,8 +383,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
                 assert_equal(balances["mine"]["immature"], 150)
                 assert_equal(len(node.get_wallet_rpc(self.default_wallet_name).listunspent()), 0)
 
-            # dump the blockchain as mock data for fast-forward test
-            if self.ff_blockchain_data_exists():
+            if not self.ff_blockchain_data_exists():
                 self.log.info("Dumping blockchain data for fast-forward test")
                 dumped_blocks = self.dump_blockchain_from_genesis(node)
                 self.save_dumped_blocks(dumped_blocks)
@@ -377,8 +399,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
         self.log.info("Replay dumped BNG headers into fresh CTAM and play dumped blocks")
         with self.running_ctam_server() as ctam:
             self.assert_ctam_empty(ctam)
-            self.start_node(2)
-            copied = self.nodes[2]
+            copied = self.start_mining_node(2)
             assert_equal(copied.getblockcount(), 0)
 
             self.fast_forward_node_from_dumped_blocks(ctam, copied, dumped_blocks)
@@ -398,8 +419,18 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             self.stop_node(2)
 
     def run_test(self):
-        self.test_genesis_flow()
-        self.test_fast_forward_from_chain_copy()
+        selected_test = os.environ.get(self.TEST_SELECTOR_ENV)
+        if selected_test is None:
+            self.test_genesis_flow()
+            self.test_fast_forward_from_chain_copy()
+        elif selected_test == "genesis":
+            self.test_genesis_flow()
+        elif selected_test == "fast_forward":
+            self.test_fast_forward_from_chain_copy()
+        else:
+            raise AssertionError(
+                f"{self.TEST_SELECTOR_ENV} must be unset, 'genesis', or 'fast_forward'; got {selected_test!r}"
+            )
 
 
 if __name__ == "__main__":
