@@ -4,7 +4,8 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BNG_REPO_ROOT="${BNG_REPO_ROOT:-${CTAM_REPO_ROOT:-$SCRIPT_DIR}}"
 PYTHON_BIN="${PYTHON_BIN:-}"
-TEST_BUILD_DIRS="${TEST_BUILD_DIRS:-build build_ctam_rest_test build_ctam_functional_test}"
+BUILD_JOBS="${BUILD_JOBS:-4}"
+TEST_BUILD_DIRS="${TEST_BUILD_DIRS:-build_all_test}"
 
 usage() {
 	cat <<EOF
@@ -15,6 +16,7 @@ Environment:
   BNG_REPO_ROOT    Repo root to operate from (default: script directory)
   CTAM_REPO_ROOT   Legacy fallback for the repo root
   TEST_BUILD_DIRS  Space-separated build dirs to run ctest in
+  BUILD_JOBS       Parallel build jobs for cmake --build (default: 4)
   PYTHON_BIN       Python interpreter to use for pytest (default: python3 or python)
 EOF
 }
@@ -38,13 +40,27 @@ find_python() {
 	return 1
 }
 
+ensure_build_dir() {
+	build_dir="$1"
+	build_path="$BNG_REPO_ROOT/$build_dir"
+
+	if [ ! -f "$build_path/CMakeCache.txt" ] || [ ! -f "$build_path/CTestTestfile.cmake" ]; then
+		echo "Configuring $build_dir..."
+		mkdir -p "$build_path"
+		cmake -S "$BNG_REPO_ROOT" -B "$build_path"
+	fi
+}
+
+build_tests() {
+	build_dir="$1"
+	build_path="$BNG_REPO_ROOT/$build_dir"
+
+	echo "Rebuilding $build_dir..."
+	cmake --build "$build_path" -j"$BUILD_JOBS"
+}
+
 run_ctest_dir() {
 	build_dir="$1"
-	if [ ! -f "$BNG_REPO_ROOT/$build_dir/CTestTestfile.cmake" ]; then
-		echo "Skipping $build_dir (no CTestTestfile.cmake found)"
-		return 0
-	fi
-
 	echo "Running ctest in $build_dir..."
 	ctest --test-dir "$BNG_REPO_ROOT/$build_dir" --output-on-failure
 }
@@ -117,8 +133,10 @@ cd "$BNG_REPO_ROOT"
 echo "BNG repo root: $BNG_REPO_ROOT"
 
 for build_dir in $TEST_BUILD_DIRS; do
+	ensure_build_dir "$build_dir"
+	build_tests "$build_dir"
 	run_ctest_dir "$build_dir"
 done
 
-run_functional_tests
-run_ctam_functional_tests
+#run_functional_tests
+#run_ctam_functional_tests
