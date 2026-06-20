@@ -261,6 +261,13 @@ bool HasRequestPath(const std::vector<MockRequest>& requests, const std::string&
     return false;
 }
 
+size_t CountRequestPath(const std::vector<MockRequest>& requests, const std::string& path)
+{
+    return std::count_if(requests.begin(), requests.end(), [&path](const MockRequest& request) {
+        return request.path == path;
+    });
+}
+
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(ctam_miner_tests, BasicTestingSetup)
@@ -309,6 +316,11 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
 
     const auto requests = server.Requests();
     BOOST_REQUIRE_EQUAL(requests.size(), 6U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/status"), 2U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/mining"), 1U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/mining/1"), 1U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/crypto/cta_sha256"), 1U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/branches/42/commit"), 1U);
     BOOST_CHECK_EQUAL(requests[0].path, "/status");
     BOOST_CHECK_EQUAL(requests[1].path, "/mining");
     const UniValue mining_request = ParseBody(requests[1].body);
@@ -325,6 +337,44 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     const UniValue commit_request = ParseBody(requests[5].body);
     BOOST_CHECK_EQUAL(commit_request["bng_height"].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(commit_request["bng_block_hash"].get_str(), header.GetHash().ToString());
+    BOOST_CHECK(!server.SawUnexpectedRequest());
+}
+
+BOOST_AUTO_TEST_CASE(solve_header_rejects_unavailable_ctam_server_without_fallback)
+{
+    std::string unavailable_url;
+    {
+        MockCtamServer server{{}};
+        unavailable_url = server.Url();
+    }
+
+    CBlockHeader header = Header();
+    uint64_t max_tries{100};
+    ArgsManager args;
+    args.ForceSetArg("-ctammining", "1");
+    args.ForceSetArg("-ctamresturl", unavailable_url);
+    args.ForceSetArg("-ctamtimeoutms", "1");
+    BOOST_CHECK_THROW(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE), std::runtime_error);
+    BOOST_CHECK_EQUAL(header.nNonce, 0U);
+    BOOST_CHECK_EQUAL(max_tries, 100U);
+}
+
+BOOST_AUTO_TEST_CASE(verify_header_short_circuits_when_ctam_status_matches_next_tip)
+{
+    CBlockHeader header = Header();
+    MockCtamServer server{{
+        {EVHTTP_REQ_GET, "/status", StatusJson(/*bng_height=*/1, /*bng_block_hash=*/header.GetHash().ToString())},
+    }};
+
+    ArgsManager args;
+    ConfigureArgs(args, server);
+    BOOST_CHECK(node::CtamMiningBackend{args}.VerifyHeader(header, /*expected_trunk_height=*/0, uint256::ONE));
+
+    const auto requests = server.Requests();
+    BOOST_REQUIRE_EQUAL(requests.size(), 1U);
+    BOOST_CHECK_EQUAL(requests[0].path, "/status");
+    BOOST_CHECK(!HasRequestPath(requests, "/crypto/cta_sha256"));
+    BOOST_CHECK(!HasBranchCommitRequest(requests));
     BOOST_CHECK(!server.SawUnexpectedRequest());
 }
 

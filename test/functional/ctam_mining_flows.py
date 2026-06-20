@@ -178,6 +178,16 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             assert_equal(len(block["hash"]), 64)
         return blocks
 
+    @staticmethod
+    def mutate_block_hex(block_hex: str) -> str:
+        raw = bytearray.fromhex(block_hex)
+        header_size = 80
+        if len(raw) <= header_size:
+            raise AssertionError("cannot mutate a block that has no body beyond the header")
+        # Flip a bit in the block body so the header merkle root no longer matches.
+        raw[header_size] ^= 0x01
+        return raw.hex()
+
     def ctam_command(self, state_path: str) -> list[str]:
         ctam_repo = self.ctam_repo()
         ctam_binary = ctam_repo / "target" / "debug" / "ctam"
@@ -418,18 +428,71 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
 
             self.stop_node(2)
 
+    def test_fast_forward_block_submission_rejections(self):
+        self.log.info("Reject mutated, out-of-order, and duplicate BNG block submissions")
+        dumped_blocks = self.load_dumped_blocks()
+
+        with self.running_ctam_server() as ctam:
+            self.assert_ctam_empty(ctam)
+            node = self.start_mining_node(1)
+            try:
+                mutated_hex = self.mutate_block_hex(dumped_blocks[0]["hex"])
+                mutated_result = node.submitblock(mutated_hex)
+                assert mutated_result is not None, "mutated block should be rejected"
+                assert_equal(node.getblockcount(), 0)
+
+                out_of_order_result = node.submitblock(dumped_blocks[1]["hex"])
+                assert out_of_order_result is not None
+                assert_equal(node.getblockcount(), 0)
+
+                skipped_result = node.submitblock(dumped_blocks[2]["hex"])
+                assert skipped_result is not None
+                assert_equal(node.getblockcount(), 0)
+
+                self.fast_forward_node_from_dumped_blocks(ctam, node, dumped_blocks[:2])
+                assert_equal(node.getblockcount(), 2)
+                assert_equal(node.getbestblockhash(), dumped_blocks[1]["hash"])
+                self.assert_ctam_matches_tip(ctam, node)
+
+                duplicate_result = node.submitblock(dumped_blocks[1]["hex"])
+                assert duplicate_result is not None
+                assert_equal(node.getblockcount(), 2)
+                assert_equal(node.getbestblockhash(), dumped_blocks[1]["hash"])
+                self.assert_ctam_matches_tip(ctam, node)
+            finally:
+                self.stop_node(1)
+
+    def test_mining_fails_without_ctam_fallback(self):
+        self.log.info("Restart a miner against an unavailable CTAM REST endpoint")
+        bad_url = "http://127.0.0.1:1/"
+        self.restart_node(0, extra_args=["-ctammining=1", f"-ctamresturl={bad_url}", "-fallbackfee=0.0002"])
+        node = self.nodes[0]
+        start_height = node.getblockcount()
+        try:
+            self.mine_blocks(node, 1)
+        except Exception as exc:
+            self.log.info("Expected CTAM mining failure: %s", exc)
+        else:
+            raise AssertionError("mining unexpectedly succeeded without a reachable CTAM server")
+        assert_equal(node.getblockcount(), start_height)
+
     def run_test(self):
         selected_test = os.environ.get(self.TEST_SELECTOR_ENV)
         if selected_test is None:
             self.test_genesis_flow()
             self.test_fast_forward_from_chain_copy()
+            self.test_fast_forward_block_submission_rejections()
         elif selected_test == "genesis":
             self.test_genesis_flow()
         elif selected_test == "fast_forward":
             self.test_fast_forward_from_chain_copy()
+        elif selected_test == "rejections":
+            self.test_fast_forward_block_submission_rejections()
+        elif selected_test == "no_fallback":
+            self.test_mining_fails_without_ctam_fallback()
         else:
             raise AssertionError(
-                f"{self.TEST_SELECTOR_ENV} must be unset, 'genesis', or 'fast_forward'; got {selected_test!r}"
+                f"{self.TEST_SELECTOR_ENV} must be unset, 'genesis', 'fast_forward', 'rejections', or 'no_fallback'; got {selected_test!r}"
             )
 
 
