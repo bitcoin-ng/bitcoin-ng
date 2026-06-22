@@ -110,12 +110,12 @@ CtamMiningOptions GetCtamMiningOptions(const ArgsManager& args)
     };
 }
 
-CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header, uint32_t context_size)
+CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header)
 {
     return {
         .energy_difficulty = header.nBits,
-        .major_ctam_difficulty_context_size = context_size,
-        .minor_ctam_difficulty_rounds = CTAMDifficultyTriple::CONSENSUS_MINOR_ROUNDS,
+        .major_ctam_difficulty_context_size = header.nMajorWorkCtxSize,
+        .minor_ctam_difficulty_rounds = header.nMinorWorkRounds,
     };
 }
 
@@ -137,7 +137,7 @@ uint32_t CtamMiningBackend::GetLiveContextSize() const
 
 CTAMDifficultyTriple CtamMiningBackend::BuildDifficulty(const CBlockHeader& header) const
 {
-    return BuildCtamDifficulty(header, GetLiveContextSize());
+    return BuildCtamDifficulty(header);
 }
 
 CtamHeaderMiningWork CtamMiningBackend::BuildHeaderWork(const CBlockHeader& header) const
@@ -159,7 +159,7 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
 
     CtamRestClient client{m_options.client_options};
     const auto status = client.Status();
-    const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
+    const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header);
     RequireCtamTrunkState(status, expected_trunk_height, expected_trunk_hash, difficulty.major_ctam_difficulty_context_size);
     const CtamHeaderMiningWork work = BuildHeaderWork(header);
 
@@ -257,7 +257,7 @@ bool CtamMiningBackend::VerifyHeader(const CBlockHeader& header, int expected_tr
     try {
         CtamRestClient client{m_options.client_options};
         const auto status = client.Status();
-        const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header, status.context_size);
+        const CTAMDifficultyTriple difficulty = BuildCtamDifficulty(header);
         if (CtamTrunkMatchesBlock(status, expected_trunk_height + 1, header.GetHash(), difficulty.major_ctam_difficulty_context_size)) {
             return true;
         }

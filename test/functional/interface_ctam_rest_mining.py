@@ -298,14 +298,16 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
             assert_equal(len(digest["digest_hex"]), 64)
 
             self.log.info("Start and poll a CTAM /mining worker job over node-owned work bytes")
-            header_bytes = bytearray(80)
+            header_bytes = bytearray(115)
             header_bytes[0:4] = (4).to_bytes(4, "little", signed=True)
-            header_bytes[68:72] = (1_700_000_000).to_bytes(4, "little")
-            header_bytes[72:76] = (0x207FFFFF).to_bytes(4, "little")
-            header_bytes[76:80] = (0).to_bytes(4, "little")
+            header_bytes[100:104] = (1_700_000_000).to_bytes(4, "little")
+            header_bytes[104:108] = (0x207FFFFF).to_bytes(4, "little")
+            header_bytes[108:110] = context_size.to_bytes(2, "little")
+            header_bytes[110:111] = (16).to_bytes(1, "little")
+            header_bytes[111:115] = (0).to_bytes(4, "little")
             started = ctam.start_mining_job(
                 payload_hex=header_bytes.hex(),
-                nonce_offset=76,
+                nonce_offset=111,
                 nonce_start=0,
                 nonce_end=4095,
                 energy_difficulty=0x207FFFFF,
@@ -314,7 +316,7 @@ class InterfaceCtamRestMiningTest(BitcoinTestFramework):
                 keep_branch=False,
             )
             assert_equal(started["status"], "running")
-            assert_equal(started["nonce_offset"], 76)
+            assert_equal(started["nonce_offset"], 111)
             assert_equal(started["energy_difficulty"], 0x207FFFFF)
             assert_equal(started["context_size_difficulty"], context_size)
             assert_equal(started["injection_rounds_difficulty"], 16)

@@ -28,11 +28,11 @@ CtamHeaderMiningWork BuildCtamHeaderMiningWork(const CBlockHeader& header)
 {
     CtamHeaderMiningWork work{};
     work.work_bytes = SerializeHeader(header);
-    if (work.work_bytes.size() < sizeof(header.nNonce)) {
-        throw std::runtime_error("CTAM header mining requires a serialized header large enough to carry nNonce");
+    if (work.work_bytes.size() != BNG_HEADER_V1_SIZE) {
+        throw std::runtime_error("CTAM header mining requires a serialized BNG header");
     }
 
-    work.nonce_offset = static_cast<uint32_t>(work.work_bytes.size() - sizeof(header.nNonce));
+    work.nonce_offset = BNG_HEADER_V1_NONCE_OFFSET;
 
     return work;
 }

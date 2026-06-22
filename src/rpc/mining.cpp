@@ -1011,6 +1011,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("vbrequired", int(0));
 
     result.pushKV("previousblockhash", block.hashPrevBlock.GetHex());
+    result.pushKV("historymmrroot", block.hashHistoryMMRRoot.GetHex());
     result.pushKV("transactions", std::move(transactions));
     result.pushKV("coinbaseaux", std::move(aux));
     result.pushKV("coinbasevalue", (int64_t)block.vtx[0]->vout[0].nValue);
@@ -1034,6 +1035,10 @@ static RPCHelpMan getblocktemplate()
     }
     result.pushKV("curtime", block.GetBlockTime());
     result.pushKV("bits", strprintf("%08x", block.nBits));
+    result.pushKV("major_work_ctx_size", block.nMajorWorkCtxSize);
+    result.pushKV("minor_work_rounds", block.nMinorWorkRounds);
+    result.pushKV("header_size", BNG_HEADER_V1_SIZE);
+    result.pushKV("nonce_offset", BNG_HEADER_V1_NONCE_OFFSET);
     result.pushKV("height", (int64_t)(pindexPrev->nHeight+1));
 
     if (consensusParams.signet_blocks) {

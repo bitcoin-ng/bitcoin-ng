@@ -707,7 +707,8 @@ class CTransaction:
 
 
 class CBlockHeader:
-    __slots__ = ("hashMerkleRoot", "hashPrevBlock", "nBits", "nNonce",
+    __slots__ = ("hashHistoryMMRRoot", "hashMerkleRoot", "hashPrevBlock",
+                 "nBits", "nMajorWorkCtxSize", "nMinorWorkRounds", "nNonce",
                  "nTime", "nVersion")
 
     def __init__(self, header=None):
@@ -717,24 +718,33 @@ class CBlockHeader:
             self.nVersion = header.nVersion
             self.hashPrevBlock = header.hashPrevBlock
             self.hashMerkleRoot = header.hashMerkleRoot
+            self.hashHistoryMMRRoot = header.hashHistoryMMRRoot
             self.nTime = header.nTime
             self.nBits = header.nBits
+            self.nMajorWorkCtxSize = header.nMajorWorkCtxSize
+            self.nMinorWorkRounds = header.nMinorWorkRounds
             self.nNonce = header.nNonce
 
     def set_null(self):
         self.nVersion = 4
         self.hashPrevBlock = 0
         self.hashMerkleRoot = 0
+        self.hashHistoryMMRRoot = 0
         self.nTime = 0
         self.nBits = 0
+        self.nMajorWorkCtxSize = 27
+        self.nMinorWorkRounds = 16
         self.nNonce = 0
 
     def deserialize(self, f):
         self.nVersion = int.from_bytes(f.read(4), "little", signed=True)
         self.hashPrevBlock = deser_uint256(f)
         self.hashMerkleRoot = deser_uint256(f)
+        self.hashHistoryMMRRoot = deser_uint256(f)
         self.nTime = int.from_bytes(f.read(4), "little")
         self.nBits = int.from_bytes(f.read(4), "little")
+        self.nMajorWorkCtxSize = int.from_bytes(f.read(2), "little")
+        self.nMinorWorkRounds = int.from_bytes(f.read(1), "little")
         self.nNonce = int.from_bytes(f.read(4), "little")
 
     def serialize(self):
@@ -745,8 +755,11 @@ class CBlockHeader:
         r += self.nVersion.to_bytes(4, "little", signed=True)
         r += ser_uint256(self.hashPrevBlock)
         r += ser_uint256(self.hashMerkleRoot)
+        r += ser_uint256(self.hashHistoryMMRRoot)
         r += self.nTime.to_bytes(4, "little")
         r += self.nBits.to_bytes(4, "little")
+        r += self.nMajorWorkCtxSize.to_bytes(2, "little")
+        r += self.nMinorWorkRounds.to_bytes(1, "little")
         r += self.nNonce.to_bytes(4, "little")
         return r
 
@@ -761,12 +774,13 @@ class CBlockHeader:
         return uint256_from_str(hash256(self._serialize_header()))
 
     def __repr__(self):
-        return "CBlockHeader(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x nTime=%s nBits=%08x nNonce=%08x)" \
+        return "CBlockHeader(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x hashHistoryMMRRoot=%064x nTime=%s nBits=%08x nMajorWorkCtxSize=%i nMinorWorkRounds=%i nNonce=%08x)" \
             % (self.nVersion, self.hashPrevBlock, self.hashMerkleRoot,
-               time.ctime(self.nTime), self.nBits, self.nNonce)
+               self.hashHistoryMMRRoot, time.ctime(self.nTime), self.nBits,
+               self.nMajorWorkCtxSize, self.nMinorWorkRounds, self.nNonce)
 
 BLOCK_HEADER_SIZE = len(CBlockHeader().serialize())
-assert_equal(BLOCK_HEADER_SIZE, 80)
+assert_equal(BLOCK_HEADER_SIZE, 115)
 
 class CBlock(CBlockHeader):
     __slots__ = ("vtx",)
@@ -840,9 +854,10 @@ class CBlock(CBlockHeader):
         return (WITNESS_SCALE_FACTOR - 1) * without_witness_size + with_witness_size
 
     def __repr__(self):
-        return "CBlock(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x nTime=%s nBits=%08x nNonce=%08x vtx=%s)" \
+        return "CBlock(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x hashHistoryMMRRoot=%064x nTime=%s nBits=%08x nMajorWorkCtxSize=%i nMinorWorkRounds=%i nNonce=%08x vtx=%s)" \
             % (self.nVersion, self.hashPrevBlock, self.hashMerkleRoot,
-               time.ctime(self.nTime), self.nBits, self.nNonce, repr(self.vtx))
+               self.hashHistoryMMRRoot, time.ctime(self.nTime), self.nBits,
+               self.nMajorWorkCtxSize, self.nMinorWorkRounds, self.nNonce, repr(self.vtx))
 
 
 class PrefilledTransaction:

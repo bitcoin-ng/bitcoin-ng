@@ -200,12 +200,13 @@ std::string JobJson(std::string status, bool found, uint64_t branch_key, bool br
 {
     const std::string digest = found ? R"("0102030405060708090001020304050607080900010203040506070809000102")" : "null";
     return strprintf(
-        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":76,"branch_key":%u,"branch_kept":%s,"energy_difficulty":%u,"context_size_difficulty":%u,"injection_rounds_difficulty":%u,"rounds":64,"error":null})",
+        R"({"job_id":"1","status":"%s","found":%s,"digest_hex":%s,"winning_nonce":%s,"attempts":%u,"nonce_start":0,"nonce_end":99,"nonce_offset":%u,"branch_key":%u,"branch_kept":%s,"energy_difficulty":%u,"context_size_difficulty":%u,"injection_rounds_difficulty":%u,"rounds":64,"error":null})",
         status,
         found ? "true" : "false",
         digest,
         winning_nonce,
         attempts,
+        BNG_HEADER_V1_NONCE_OFFSET,
         branch_key,
         branch_kept ? "true" : "false",
         EASY_ENERGY_DIFFICULTY,
@@ -221,6 +222,8 @@ CBlockHeader Header()
     header.hashMerkleRoot = uint256::ONE;
     header.nTime = 1'700'000'000;
     header.nBits = EASY_ENERGY_DIFFICULTY;
+    header.nMajorWorkCtxSize = CTAM_CONTEXT_SIZE;
+    header.nMinorWorkRounds = CTAM_MINOR_ROUNDS;
     header.nNonce = 0;
     return header;
 }
@@ -284,14 +287,14 @@ BOOST_AUTO_TEST_CASE(options_difficulty_and_header_work)
     BOOST_CHECK_EQUAL(options.client_options.timeout_ms, 1234);
 
     const CBlockHeader header = Header();
-    const auto difficulty = node::BuildCtamDifficulty(header, CTAM_CONTEXT_SIZE);
+    const auto difficulty = node::BuildCtamDifficulty(header);
     BOOST_CHECK_EQUAL(difficulty.energy_difficulty, header.nBits);
     BOOST_CHECK_EQUAL(difficulty.major_ctam_difficulty_context_size, CTAM_CONTEXT_SIZE);
     BOOST_CHECK_EQUAL(difficulty.minor_ctam_difficulty_rounds, CTAM_MINOR_ROUNDS);
 
     const auto work = node::CtamMiningBackend{args}.BuildHeaderWork(header);
-    BOOST_CHECK_EQUAL(work.work_bytes.size(), 80U);
-    BOOST_CHECK_EQUAL(work.nonce_offset, 76U);
+    BOOST_CHECK_EQUAL(work.work_bytes.size(), BNG_HEADER_V1_SIZE);
+    BOOST_CHECK_EQUAL(work.nonce_offset, BNG_HEADER_V1_NONCE_OFFSET);
 }
 
 BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
@@ -323,7 +326,7 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     BOOST_CHECK_EQUAL(requests[0].path, "/status");
     BOOST_CHECK_EQUAL(requests[1].path, "/mining");
     const UniValue mining_request = ParseBody(requests[1].body);
-    BOOST_CHECK_EQUAL(mining_request["nonce_offset"].getInt<int>(), 76);
+    BOOST_CHECK_EQUAL(mining_request["nonce_offset"].getInt<int>(), static_cast<int>(BNG_HEADER_V1_NONCE_OFFSET));
     BOOST_CHECK_EQUAL(mining_request["energy_difficulty"].getInt<int>(), static_cast<int>(EASY_ENERGY_DIFFICULTY));
     BOOST_CHECK(!mining_request.exists("energy_difficulty_bits"));
     BOOST_CHECK_EQUAL(mining_request["context_size_difficulty"].getInt<int>(), static_cast<int>(CTAM_CONTEXT_SIZE));

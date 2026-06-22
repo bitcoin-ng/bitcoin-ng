@@ -21,6 +21,7 @@
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <util/moneystr.h>
 #include <util/signalinterrupt.h>
@@ -174,9 +175,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
+    pblock->hashHistoryMMRRoot.SetNull();
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
     pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
     pblock->nNonce         = 0;
+    pblock->nMajorWorkCtxSize = BNG_MAJOR_WORK_CTX_SIZE_DEFAULT;
+    pblock->nMinorWorkRounds = BNG_MINOR_WORK_ROUNDS_FIXED;
 
     if (m_options.test_block_validity) {
         if (BlockValidationState state{TestBlockValidity(m_chainstate, *pblock, /*check_pow=*/false, /*check_merkle_root=*/false)}; !state.IsValid()) {

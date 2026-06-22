@@ -198,7 +198,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             raise AssertionError(f"Fast-forward blockchain dump has no blocks: {path}")
         for expected_height, block in enumerate(blocks, start=1):
             assert_equal(block["height"], expected_height)
-            assert_equal(len(block["header_hex"]), 160)
+            assert_equal(len(block["header_hex"]), 230)
             assert block["hex"].startswith(block["header_hex"])
             assert_equal(len(block["hash"]), 64)
         return blocks
@@ -206,7 +206,7 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
     @staticmethod
     def mutate_block_hex(block_hex: str) -> str:
         raw = bytearray.fromhex(block_hex)
-        header_size = 80
+        header_size = 115
         if len(raw) <= header_size:
             raise AssertionError("cannot mutate a block that has no body beyond the header")
         # Flip a bit in the block body so the header merkle root no longer matches.
@@ -353,8 +353,8 @@ class CtamMiningFlowsTest(BitcoinTestFramework):
             block_hash = node.getblockhash(height)
             block_hex = node.getblock(block_hash, 0)
             header = node.getblockheader(block_hash)
-            header_hex = block_hex[:160]
-            assert_equal(len(header_hex), 160)
+            header_hex = block_hex[:230]
+            assert_equal(len(header_hex), 230)
             blocks.append({
                 "height": height,
                 "hash": block_hash,

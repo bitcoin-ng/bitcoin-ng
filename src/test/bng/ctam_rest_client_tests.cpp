@@ -192,11 +192,13 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
     header.nVersion = 4;
     header.nTime = 1'700'000'000;
     header.nBits = difficulty.energy_difficulty;
+    header.nMajorWorkCtxSize = difficulty.major_ctam_difficulty_context_size;
+    header.nMinorWorkRounds = difficulty.minor_ctam_difficulty_rounds;
     header.nNonce = 0;
 
     const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(header);
-    BOOST_CHECK_EQUAL(work.work_bytes.size(), 80U);
-    BOOST_CHECK_EQUAL(work.nonce_offset, 76U);
+    BOOST_CHECK_EQUAL(work.work_bytes.size(), BNG_HEADER_V1_SIZE);
+    BOOST_CHECK_EQUAL(work.nonce_offset, BNG_HEADER_V1_NONCE_OFFSET);
 
     const auto result = client.MineCSHA256(work.work_bytes,
                                            work.nonce_offset,
@@ -208,7 +210,7 @@ BOOST_AUTO_TEST_CASE(csha256_header_mining_smoke)
     BOOST_REQUIRE(result.digest.has_value());
     BOOST_REQUIRE(result.winning_nonce.has_value());
     BOOST_CHECK_LE(*result.winning_nonce, 4095U);
-    BOOST_CHECK_EQUAL(result.nonce_offset, 76U);
+    BOOST_CHECK_EQUAL(result.nonce_offset, BNG_HEADER_V1_NONCE_OFFSET);
     BOOST_CHECK_GT(result.attempts, 0U);
     BOOST_CHECK(std::any_of(result.digest->begin(), result.digest->end(), [](unsigned char byte) { return byte != 0; }));
 }
@@ -242,6 +244,8 @@ BOOST_AUTO_TEST_CASE(csha256_mining_job_smoke)
     header.nVersion = 4;
     header.nTime = 1'700'000'000;
     header.nBits = difficulty.energy_difficulty;
+    header.nMajorWorkCtxSize = difficulty.major_ctam_difficulty_context_size;
+    header.nMinorWorkRounds = difficulty.minor_ctam_difficulty_rounds;
     header.nNonce = 0;
 
     const CtamHeaderMiningWork work = BuildCtamHeaderMiningWork(header);

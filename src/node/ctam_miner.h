@@ -37,7 +37,7 @@ struct CtamSolvedHeader {
 };
 
 CtamMiningOptions GetCtamMiningOptions(const ArgsManager& args);
-CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header, uint32_t context_size);
+CTAMDifficultyTriple BuildCtamDifficulty(const CBlockHeader& header);
 
 class CtamMiningBackend
 {

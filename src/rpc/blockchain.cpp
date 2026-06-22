@@ -162,10 +162,13 @@ UniValue blockheaderToJSON(const CBlockIndex& tip, const CBlockIndex& blockindex
     result.pushKV("version", blockindex.nVersion);
     result.pushKV("versionHex", strprintf("%08x", blockindex.nVersion));
     result.pushKV("merkleroot", blockindex.hashMerkleRoot.GetHex());
+    result.pushKV("historymmrroot", blockindex.hashHistoryMMRRoot.GetHex());
     result.pushKV("time", blockindex.nTime);
     result.pushKV("mediantime", blockindex.GetMedianTimePast());
     result.pushKV("nonce", blockindex.nNonce);
     result.pushKV("bits", strprintf("%08x", blockindex.nBits));
+    result.pushKV("major_work_ctx_size", blockindex.nMajorWorkCtxSize);
+    result.pushKV("minor_work_rounds", blockindex.nMinorWorkRounds);
     result.pushKV("target", GetTarget(blockindex, pow_limit).GetHex());
     result.pushKV("difficulty", GetDifficulty(blockindex));
     result.pushKV("chainwork", blockindex.nChainWork.GetHex());

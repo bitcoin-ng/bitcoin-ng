@@ -128,9 +128,12 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nUndoPos       = diskindex.nUndoPos;
                 pindexNew->nVersion       = diskindex.nVersion;
                 pindexNew->hashMerkleRoot = diskindex.hashMerkleRoot;
+                pindexNew->hashHistoryMMRRoot = diskindex.hashHistoryMMRRoot;
                 pindexNew->nTime          = diskindex.nTime;
                 pindexNew->nBits          = diskindex.nBits;
                 pindexNew->nNonce         = diskindex.nNonce;
+                pindexNew->nMajorWorkCtxSize = diskindex.nMajorWorkCtxSize;
+                pindexNew->nMinorWorkRounds = diskindex.nMinorWorkRounds;
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 

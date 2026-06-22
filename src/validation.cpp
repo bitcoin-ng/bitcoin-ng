@@ -3945,6 +3945,19 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
+    if (::GetSerializeSize(block) != BNG_HEADER_V1_SIZE) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-header-size", "serialized BNG header size mismatch");
+    }
+    if (block.nMajorWorkCtxSize < BNG_MAJOR_WORK_CTX_SIZE_DEFAULT) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-major-work-ctx-size", "major work context size is below the BNG floor");
+    }
+    if (block.nMinorWorkRounds > BNG_MINOR_WORK_ROUNDS_MAX) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-minor-work-rounds", "minor work rounds exceed the SHA-256 round limit");
+    }
+    if (block.nMinorWorkRounds != BNG_MINOR_WORK_ROUNDS_FIXED) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-minor-work-rounds", "minor work rounds do not match BNG consensus");
+    }
+
     // CTAM-backed proof-of-work is state-sensitive and must be checked once the
     // previous block index is known in ContextualCheckBlockHeader().
     if (fCheckPOW && !CtamPowValidationEnabled()) {

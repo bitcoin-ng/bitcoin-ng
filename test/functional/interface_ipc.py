@@ -101,7 +101,7 @@ class IPCInterfaceTest(BitcoinTestFramework):
     def run_mining_test(self):
         self.log.info("Running mining test")
         block_hash_size = 32
-        block_header_size = 80
+        block_header_size = 115
         timeout = 1000.0 # 1000 milliseconds
         miniwallet = MiniWallet(self.nodes[0])
 
