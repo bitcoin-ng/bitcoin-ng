@@ -24,7 +24,9 @@
 #include <util/string.h>
 #include <util/vector.h>
 
+#include <cstddef>
 #include <functional>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -137,6 +139,7 @@ struct Testnet4Setup : public TestingSetup {
 };
 
 class CBlock;
+class CBlockIndex;
 struct CMutableTransaction;
 class CScript;
 
@@ -168,6 +171,9 @@ struct TestChain100Setup : public TestingSetup {
 
     //! Mine a series of new blocks on the active chain.
     void mineBlocks(int num_blocks);
+
+    //! Reset CTAM and replay the active-chain prefix through pindex.
+    void SyncCtamToActiveChain(const CBlockIndex* pindex);
 
     /**
     * Create a transaction, optionally setting the fee based on the feerate.
@@ -271,6 +277,7 @@ std::unique_ptr<T> MakeNoLogFileContext(const ChainType chain_type = ChainType::
 }
 
 CBlock getBlock13b8a();
+std::vector<std::byte> BngBlockVectorFromLegacyHex(std::string_view legacy_hex);
 
 // Make types usable in BOOST_CHECK_* @{
 namespace std {

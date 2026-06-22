@@ -96,6 +96,15 @@ public:
         std::string status;
     };
 
+    struct ResetResult {
+        std::string status;
+        uint32_t context_size;
+        uint64_t trunk_key;
+        std::optional<uint64_t> bng_height;
+        std::optional<std::string> bng_block_hash;
+        uint64_t branch_count;
+    };
+
     explicit CtamRestClient(const CTAMClientOptions& options);
 
     UniValue Health() const;
@@ -105,6 +114,7 @@ public:
     CtaSha256Result PostCtaSha256MessageKeepBranch(std::span<const unsigned char> message, const CTAMDifficultyTriple& difficulty) const;
     CommitBranchResult CommitBranch(uint64_t branch_key) const;
     CommitBranchResult CommitBranch(uint64_t branch_key, uint64_t bng_height, std::string_view bng_block_hash) const;
+    ResetResult AdminReset(uint32_t context_size, std::optional<uint64_t> bng_height = std::nullopt, std::optional<std::string_view> bng_block_hash = std::nullopt) const;
     StatusResult EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const;
     MiningJob StartMiningJob(std::span<const unsigned char> work_bytes,
                              uint32_t nonce_offset,

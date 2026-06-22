@@ -7,8 +7,11 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <crypto/ctam_client.h>
+#include <crypto/ctam_mining.h>
 #include <index/blockfilterindex.h>
 #include <interfaces/chain.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <pow.h>
 #include <test/util/blockfilter.h>
@@ -17,6 +20,7 @@
 
 #include <boost/test/unit_test.hpp>
 #include <future>
+#include <limits>
 
 using node::BlockAssembler;
 using node::BlockManager;
@@ -25,6 +29,7 @@ using node::CBlockTemplate;
 BOOST_AUTO_TEST_SUITE(blockfilter_index_tests)
 
 struct BuildChainTestingSetup : public TestChain100Setup {
+    bool EnsureCtamAt(const CBlockIndex* pindex);
     CBlock CreateBlock(const CBlockIndex* prev, const std::vector<CMutableTransaction>& txns, const CScript& scriptPubKey);
     bool BuildChain(const CBlockIndex* pindex, const CScript& coinbase_script_pub_key, size_t length, std::vector<std::shared_ptr<CBlock>>& chain);
 };
@@ -63,6 +68,55 @@ static bool CheckFilterLookups(BlockFilterIndex& filter_index, const CBlockIndex
     return true;
 }
 
+bool BuildChainTestingSetup::EnsureCtamAt(const CBlockIndex* pindex)
+{
+    const node::CtamMiningOptions options{node::GetCtamMiningOptions(gArgs)};
+    if (!options.enabled) return true;
+
+    const uint64_t expected_height{static_cast<uint64_t>(pindex->nHeight)};
+    const std::string expected_hash{pindex->GetBlockHash().ToString()};
+    CtamRestClient client{options.client_options};
+    const auto status{client.Status()};
+    if (status.bng_height == expected_height && status.bng_block_hash == expected_hash) {
+        return true;
+    }
+
+    const auto reset{client.AdminReset(BNG_MAJOR_WORK_CTX_SIZE_DEFAULT)};
+    if (reset.status != "reset") {
+        BOOST_ERROR("CTAM reset failed while preparing blockfilter fork");
+        return false;
+    }
+
+    const CChain& active_chain = WITH_LOCK(cs_main, return m_node.chainman->ActiveChain());
+    if (!active_chain.Contains(pindex)) {
+        BOOST_ERROR("Cannot replay CTAM state to a non-active-chain fork point");
+        return false;
+    }
+
+    for (int height{1}; height <= pindex->nHeight; ++height) {
+        const CBlockIndex* replay_index{active_chain[height]};
+        CBlock block;
+        if (!m_node.chainman->m_blockman.ReadBlock(block, *replay_index)) {
+            BOOST_ERROR("Failed to read block while replaying CTAM state");
+            return false;
+        }
+        const CBlockHeader header{block.GetBlockHeader()};
+        const CtamHeaderMiningWork work{BuildCtamHeaderMiningWork(header)};
+        const auto branch{client.PostCtaSha256Message(work.work_bytes, node::BuildCtamDifficulty(header), /*keep_branch=*/true)};
+        if (!branch.branch_kept) {
+            BOOST_ERROR("CTAM did not keep replay branch");
+            return false;
+        }
+        const auto commit{client.CommitBranch(branch.branch_key, static_cast<uint64_t>(height), replay_index->GetBlockHash().ToString())};
+        if (commit.status != "committed") {
+            BOOST_ERROR("CTAM replay branch commit failed");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 CBlock BuildChainTestingSetup::CreateBlock(const CBlockIndex* prev,
     const std::vector<CMutableTransaction>& txns,
     const CScript& scriptPubKey)
@@ -87,7 +141,9 @@ CBlock BuildChainTestingSetup::CreateBlock(const CBlockIndex* prev,
         block.hashMerkleRoot = BlockMerkleRoot(block);
     }
 
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
+    if (!node::CtamMiningBackend{gArgs}.Enabled()) {
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
+    }
 
     return block;
 }
@@ -99,9 +155,19 @@ bool BuildChainTestingSetup::BuildChain(const CBlockIndex* pindex,
 {
     std::vector<CMutableTransaction> no_txns;
 
+    if (!EnsureCtamAt(pindex)) {
+        return false;
+    }
+
     chain.resize(length);
     for (auto& block : chain) {
         block = std::make_shared<CBlock>(CreateBlock(pindex, no_txns, coinbase_script_pub_key));
+        if (node::CtamMiningBackend{gArgs}.Enabled()) {
+            uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
+            if (!node::CtamMiningBackend{gArgs}.SolveHeader(m_interrupt, *block, max_tries, pindex->nHeight, pindex->GetBlockHash())) {
+                return false;
+            }
+        }
         CBlockHeader header = block->GetBlockHeader();
 
         BlockValidationState state;

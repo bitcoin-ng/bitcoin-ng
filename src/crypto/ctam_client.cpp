@@ -503,6 +503,39 @@ CtamRestClient::CommitBranchResult CtamRestClient::CommitBranch(uint64_t branch_
     };
 }
 
+CtamRestClient::ResetResult CtamRestClient::AdminReset(uint32_t context_size, std::optional<uint64_t> bng_height, std::optional<std::string_view> bng_block_hash) const
+{
+    if (context_size < CTAMDifficultyTriple::MIN_MAJOR_CONTEXT_SIZE) {
+        throw std::runtime_error("CTAM reset context_size is below the BNG consensus minimum");
+    }
+    if (bng_block_hash && bng_block_hash->size() != 64) {
+        throw std::runtime_error("CTAM reset requires a 64-character BNG block hash");
+    }
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("context_size", context_size);
+    if (bng_height) {
+        payload.pushKV("bng_height", *bng_height);
+    } else {
+        payload.pushKV("bng_height", UniValue{UniValue::VNULL});
+    }
+    if (bng_block_hash) {
+        payload.pushKV("bng_block_hash", std::string{*bng_block_hash});
+    } else {
+        payload.pushKV("bng_block_hash", UniValue{UniValue::VNULL});
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "admin/reset", payload.write());
+    return {
+        .status = RequireJSONString(response, "status", "/admin/reset"),
+        .context_size = RequireJSONUInt32(response, "context_size", "/admin/reset"),
+        .trunk_key = RequireJSONUInt64(response, "trunk_key", "/admin/reset"),
+        .bng_height = ParseOptionalUInt64(response, "bng_height", "/admin/reset"),
+        .bng_block_hash = ParseOptionalString(response, "bng_block_hash", "/admin/reset"),
+        .branch_count = RequireJSONUInt64(response, "branch_count", "/admin/reset"),
+    };
+}
+
 CtamRestClient::StatusResult CtamRestClient::EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const
 {
     ValidateDifficultyTriple(difficulty);

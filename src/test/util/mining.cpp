@@ -9,6 +9,7 @@
 #include <consensus/validation.h>
 #include <key_io.h>
 #include <node/context.h>
+#include <node/ctam_miner.h>
 #include <pow.h>
 #include <primitives/transaction.h>
 #include <test/util/script.h>
@@ -18,6 +19,7 @@
 #include <versionbits.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 
 using node::BlockAssembler;
@@ -93,9 +95,16 @@ protected:
 
 COutPoint MineBlock(const NodeContext& node, std::shared_ptr<CBlock>& block)
 {
-    while (!CheckProofOfWork(block->GetHash(), block->nBits, Params().GetConsensus())) {
-        ++block->nNonce;
-        assert(block->nNonce);
+    if (node::CtamMiningBackend{*Assert(node.args)}.Enabled()) {
+        uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
+        if (!node::CtamMiningBackend{*Assert(node.args)}.SolveHeader(*Assert(node.chainman), *block, max_tries)) {
+            return {};
+        }
+    } else {
+        while (!CheckProofOfWork(block->GetHash(), block->nBits, Params().GetConsensus())) {
+            ++block->nNonce;
+            assert(block->nNonce);
+        }
     }
 
     return ProcessBlock(node, block);

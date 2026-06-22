@@ -105,6 +105,7 @@ BOOST_AUTO_TEST_CASE(findCommonAncestor)
         m_node.chainman->ActiveChainstate().InvalidateBlock(state, active.Tip());
     }
     BOOST_CHECK_EQUAL(active.Height(), orig_tip->nHeight - 10);
+    SyncCtamToActiveChain(active.Tip());
     coinbaseKey.MakeNewKey(true);
     for (int i = 0; i < 20; ++i) {
         CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));

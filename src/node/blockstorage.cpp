@@ -1020,8 +1020,11 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 
     const auto block_hash{block.GetHash()};
 
-    // Check the header
-    if (!CheckProofOfWork(block_hash, block.nBits, GetConsensus())) {
+    // Check the BNG header shape. CTAM proof validation is state-sensitive and
+    // is performed by validation when the previous block index is available.
+    if (::GetSerializeSize(block.GetBlockHeader()) != BNG_HEADER_V1_SIZE ||
+        block.nMajorWorkCtxSize < BNG_MAJOR_WORK_CTX_SIZE_DEFAULT ||
+        block.nMinorWorkRounds != BNG_MINOR_WORK_ROUNDS_FIXED) {
         LogError("Errors in block header at %s while reading block", pos.ToString());
         return false;
     }
