@@ -167,15 +167,30 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
     const uint64_t nonce_budget_end = uint64_t{nonce_start} + max_tries - 1;
     const uint32_t nonce_end = static_cast<uint32_t>(std::min<uint64_t>(std::numeric_limits<uint32_t>::max(), nonce_budget_end));
 
+    const auto mining_start = std::chrono::steady_clock::now();
+    LogPrintf("CTAM mining start: next_height=%d block_hash=%s nBits=%08x nonce_start=%u nonce_end=%u\n",
+              expected_trunk_height + 1, header.GetHash().ToString(), header.nBits, nonce_start, nonce_end);
     CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty, /*initial_state=*/{}, /*keep_branch=*/true);
+    LogPrintf("CTAM mining job %s started for block_hash=%s\n", job.job_id, header.GetHash().ToString());
     while (!job.IsTerminal()) {
         if (interrupt) {
             client.StopMiningJob(job.job_id);
             return false;
         }
         std::this_thread::sleep_for(CTAM_MINING_POLL_INTERVAL);
-        job = client.GetMiningJob(job.job_id);
+        try {
+            job = client.GetMiningJob(job.job_id);
+        } catch (const CtamRestError& e) {
+            if (!e.IsTimeout()) {
+                throw;
+            }
+            LogWarning("CTAM GET /mining/%s timed out; job may still be running, polling that job_id again\n", job.job_id);
+        }
     }
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - mining_start);
+    LogPrintf("CTAM mining job %s finished polling: status=%s found=%d attempts=%u elapsed=%ds\n",
+              job.job_id, job.status, job.found, job.attempts, elapsed.count());
 
     max_tries = job.attempts >= max_tries ? 0 : max_tries - job.attempts;
 

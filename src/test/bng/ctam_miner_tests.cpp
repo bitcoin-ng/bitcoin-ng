@@ -41,6 +41,7 @@ struct MockReply {
     std::string path;
     std::string body;
     int status{HTTP_OK};
+    std::chrono::milliseconds delay{0};
 };
 
 struct MockRequest {
@@ -160,6 +161,9 @@ private:
                     m_unexpected = true;
                 }
             }
+        }
+        if (reply.delay > std::chrono::milliseconds{0}) {
+            std::this_thread::sleep_for(reply.delay);
         }
         Send(req, reply.status, reply.body);
     }
@@ -339,6 +343,36 @@ BOOST_AUTO_TEST_CASE(solve_header_commits_winning_branch)
     const UniValue commit_request = ParseBody(requests[5].body);
     BOOST_CHECK_EQUAL(commit_request["bng_height"].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(commit_request["bng_block_hash"].get_str(), header.GetHash().ToString());
+    BOOST_CHECK(!server.SawUnexpectedRequest());
+}
+
+BOOST_AUTO_TEST_CASE(solve_header_retries_same_job_after_poll_timeout)
+{
+    MockCtamServer server{{
+        {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
+        {EVHTTP_REQ_POST, "/mining", JobJson("running", false, 42, false, "null", 0)},
+        {EVHTTP_REQ_GET, "/mining/1", JobJson("running", false, 42, false, "null", 0), HTTP_OK, std::chrono::milliseconds{1500}},
+        {EVHTTP_REQ_GET, "/mining/1", JobJson("completed", true, 42, true, "7", 8)},
+        {EVHTTP_REQ_GET, "/status", StatusJsonWithoutBngMetadata()},
+        {EVHTTP_REQ_POST, "/crypto/cta_sha256", R"({"digest_hex":"0102030405060708090001020304050607080900010203040506070809000102","branch_key":43,"branch_kept":false,"injection_rounds_difficulty":16,"rounds":64})"},
+        {EVHTTP_REQ_POST, "/branches/42/commit", R"({"status":"committed"})"},
+    }};
+
+    CBlockHeader header = Header();
+    uint64_t max_tries{100};
+    ArgsManager args;
+    ConfigureArgs(args, server);
+    args.ForceSetArg("-ctamtimeoutms", "1");
+
+    BOOST_CHECK(node::CtamMiningBackend{args}.SolveHeader(m_interrupt, header, max_tries, /*expected_trunk_height=*/0, uint256::ONE));
+    BOOST_CHECK_EQUAL(header.nNonce, 7U);
+    BOOST_CHECK_EQUAL(max_tries, 92U);
+
+    const auto requests = server.Requests();
+    BOOST_REQUIRE_EQUAL(requests.size(), 7U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/mining"), 1U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/mining/1"), 2U);
+    BOOST_CHECK_EQUAL(CountRequestPath(requests, "/branches/42/commit"), 1U);
     BOOST_CHECK(!server.SawUnexpectedRequest());
 }
 

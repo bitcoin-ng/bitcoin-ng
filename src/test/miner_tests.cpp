@@ -723,6 +723,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     int baseheight = 0;
     std::vector<CTransactionRef> txFirst;
     const auto& consensus{Assert(m_node.chainman)->GetParams().GetConsensus()};
+    node::CtamMiningBackend ctam_mining{gArgs};
     for (const auto& bi : BLOCKINFO) {
         const int current_height{mining->getTip()->height};
 
@@ -741,7 +742,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         {
             LOCK(cs_main);
             block.nVersion = VERSIONBITS_TOP_BITS;
-            block.nTime = Assert(m_node.chainman)->ActiveChain().Tip()->GetMedianTimePast()+1;
+            block.nTime = Assert(m_node.chainman)->ActiveChain().Tip()->GetMedianTimePast() + 1;
             txCoinbase.version = 1;
             txCoinbase.vin[0].scriptSig = CScript{} << (current_height + 1) << bi.extranonce;
             txCoinbase.vout.resize(1); // Ignore the (optional) segwit commitment added by CreateNewBlock (as the hardcoded nonces don't account for this)
@@ -756,9 +757,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 
         // The block template does not have proof-of-work, so solve it.
         bool solved{false};
-        if (node::CtamMiningBackend{gArgs}.Enabled()) {
+        if (ctam_mining.Enabled()) {
             uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
-            solved = node::CtamMiningBackend{gArgs}.SolveHeader(*Assert(m_node.chainman), block, max_tries);
+            solved = ctam_mining.SolveHeader(*Assert(m_node.chainman), block, max_tries);
         } else {
             for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
                 block.nNonce = nonce;
@@ -773,8 +774,10 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(block);
         // Alternate calls between Chainman's ProcessNewBlock and submitSolution
         // via the Mining interface. The former is used by net_processing as well
-        // as the submitblock RPC.
-        if (current_height % 2 == 0) {
+        // as the submitblock RPC. CTAM mining is server-side, so CTAM-enabled
+        // runs accept the solved block directly after SolveHeader commits the
+        // winning branch; submitSolution remains legacy interface coverage.
+        if (ctam_mining.Enabled() || current_height % 2 == 0) {
             BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlock(shared_pblock, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
         } else {
             BOOST_REQUIRE(block_template->submitSolution(block.nVersion, block.nTime, block.nNonce, MakeTransactionRef(txCoinbase)));

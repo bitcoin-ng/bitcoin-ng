@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -30,6 +31,18 @@ struct CTAMDifficultyTriple {
     unsigned int energy_difficulty;
     uint32_t major_ctam_difficulty_context_size{DEFAULT_MAJOR_CONTEXT_SIZE};
     uint8_t minor_ctam_difficulty_rounds{CONSENSUS_MINOR_ROUNDS};
+};
+
+class CtamRestError : public std::runtime_error
+{
+public:
+    CtamRestError(std::string message, int error);
+
+    int ErrorCode() const { return m_error; }
+    bool IsTimeout() const;
+
+private:
+    int m_error;
 };
 
 class CtamRestClient

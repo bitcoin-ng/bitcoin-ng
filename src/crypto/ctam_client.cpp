@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -365,6 +366,16 @@ CtamRestClient::CtaSha256Result ParseCtaSha256Result(const UniValue& response, s
 
 } // namespace
 
+CtamRestError::CtamRestError(std::string message, int error)
+    : std::runtime_error{std::move(message)}, m_error{error}
+{
+}
+
+bool CtamRestError::IsTimeout() const
+{
+    return m_error == EVREQ_HTTP_TIMEOUT;
+}
+
 bool CtamRestClient::MiningJob::IsTerminal() const
 {
     return status == "completed" || status == "stopped" || status == "failed";
@@ -418,8 +429,9 @@ UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::str
     event_base_dispatch(base.get());
 
     if (response.status == 0) {
-        throw std::runtime_error("Could not connect to CTAM REST service at " + m_host + ":" + std::to_string(m_port) +
-                                 " (" + HTTPErrorString(response.error) + ")");
+        throw CtamRestError{"Could not connect to CTAM REST service at " + m_host + ":" + std::to_string(m_port) +
+                                " (" + HTTPErrorString(response.error) + ")",
+                            response.error};
     }
     if (response.status != HTTP_OK) {
         throw std::runtime_error("CTAM REST endpoint returned HTTP " + std::to_string(response.status));
