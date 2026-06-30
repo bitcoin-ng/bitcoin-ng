@@ -72,6 +72,7 @@ struct MinerTestingSetup : public TestingSetup {
 BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
+static constexpr unsigned int CTAM_MINER_TEST_ENERGY_BITS{0x1f3fffc0}; // 64x easier than 0x1f00ffff
 
 constexpr static struct {
     unsigned int extranonce;
@@ -678,6 +679,10 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     CScript scriptPubKey = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
     BlockAssembler::Options options;
     options.coinbase_output_script = scriptPubKey;
+    node::CtamMiningBackend ctam_mining{gArgs};
+    if (ctam_mining.Enabled()) {
+        gArgs.ForceSetArg("-ctamtestdiffbits", strprintf("%u", CTAM_MINER_TEST_ENERGY_BITS));
+    }
 
     // Create and check a simple template
     std::unique_ptr<BlockTemplate> block_template = mining->createNewBlock(options);
@@ -705,6 +710,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         {
             // A block template does not have proof-of-work, but it might pass
             // verification by coincidence. Grind the nonce if needed:
+            if (ctam_mining.Enabled()) {
+                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
+            }
             while (CheckProofOfWork(block.GetHash(), block.nBits, Assert(m_node.chainman)->GetParams().GetConsensus())) {
                 block.nNonce++;
             }
@@ -723,7 +731,6 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     int baseheight = 0;
     std::vector<CTransactionRef> txFirst;
     const auto& consensus{Assert(m_node.chainman)->GetParams().GetConsensus()};
-    node::CtamMiningBackend ctam_mining{gArgs};
     for (const auto& bi : BLOCKINFO) {
         const int current_height{mining->getTip()->height};
 
@@ -741,8 +748,14 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         CMutableTransaction txCoinbase(*block.vtx[0]);
         {
             LOCK(cs_main);
+            const CBlockIndex* tip = Assert(m_node.chainman)->ActiveChain().Tip();
             block.nVersion = VERSIONBITS_TOP_BITS;
-            block.nTime = Assert(m_node.chainman)->ActiveChain().Tip()->GetMedianTimePast() + 1;
+            block.nTime = tip->GetMedianTimePast() + 1;
+            if (ctam_mining.Enabled()) {
+                // Exercise the CTAM mining lifecycle without spending minutes
+                // per bootstrap block at the inherited BNG target.
+                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
+            }
             txCoinbase.version = 1;
             txCoinbase.vin[0].scriptSig = CScript{} << (current_height + 1) << bi.extranonce;
             txCoinbase.vout.resize(1); // Ignore the (optional) segwit commitment added by CreateNewBlock (as the hardcoded nonces don't account for this)

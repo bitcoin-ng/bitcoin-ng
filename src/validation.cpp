@@ -99,6 +99,15 @@ bool CtamPowValidationEnabled()
     return node::CtamMiningBackend{gArgs}.Enabled();
 }
 
+std::optional<unsigned int> CtamTestDiffBitsOverride()
+{
+    const int64_t bits{gArgs.GetIntArg("-ctamtestdiffbits", 0)};
+    if (bits <= 0 || bits > std::numeric_limits<unsigned int>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<unsigned int>(bits);
+}
+
 bool CheckCtamProofOfWork(const CBlockHeader& block, const CBlockIndex* pindexPrev)
 {
     if (pindexPrev == nullptr) {
@@ -4224,8 +4233,11 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
 
     // Check proof of work
     const Consensus::Params& consensusParams = chainman.GetConsensus();
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
+    const unsigned int expected_bits{GetNextWorkRequired(pindexPrev, &block, consensusParams)};
+    const std::optional<unsigned int> ctam_test_bits{CtamPowValidationEnabled() ? CtamTestDiffBitsOverride() : std::nullopt};
+    if (block.nBits != expected_bits && (!ctam_test_bits || block.nBits != *ctam_test_bits)) {
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+    }
 
     if (fCheckPOW && CtamPowValidationEnabled() && !CheckCtamProofOfWork(block, pindexPrev)) {
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
