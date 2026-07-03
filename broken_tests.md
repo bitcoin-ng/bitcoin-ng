@@ -20,8 +20,7 @@ The following tests did not run:
          41 - ctam_rest_client_tests (Skipped)
 
 The following tests FAILED:
- - [ ]  62 - miner_tests (Failed)
- - [ ]  75 - peerman_tests (Subprocess aborted)
+ - [x]  75 - peerman_tests (Subprocess aborted)
  - [ ] 129 - txvalidationcache_tests (Failed)
  - [ ] 135 - validation_block_tests (SEGFAULT)
  - [ ] 136 - validation_chainstate_tests (Failed)

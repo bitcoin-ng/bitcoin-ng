@@ -116,3 +116,49 @@ Do not use `-ctammining=0` for this BNG miner test. That disables CTAM proof
 validation and falls back to legacy hash proof-of-work; BNG headers, including
 the genesis-height block connected by the test fixture, are not valid under that
 legacy check and fail with `high-hash`.
+
+## Peerman Test Adoption Notes
+
+The upstream `src/test/peerman_tests.cpp` test is a peer-selection policy test,
+not a mining test. It verifies when `PeerManager::GetDesirableServiceFlags()`
+should prefer full `NODE_NETWORK` peers versus allowing
+`NODE_NETWORK_LIMITED` peers based on how close the node is to the current tip.
+
+The test still needs to produce a couple of blocks so validation-interface
+callbacks update the peer manager's view of the tip. In upstream Bitcoin Core,
+that small helper used legacy `CheckProofOfWork()` nonce grinding. In BNG, those
+helper blocks must be mined through the same server-side CTAM path as normal
+BNG blocks: BNG assembles the block, CTAM solves and commits the winning branch,
+and BNG processes the solved block.
+
+For that reason, `peerman_tests` now uses the shared `MineBlock()` test helper
+instead of open-coding proof-of-work. This keeps the peer-manager assertions
+unchanged while making the block-producing scaffold valid for CTAM-enabled BNG
+runs.
+
+Run the focused peerman test with CTAM enabled and a local CTAM daemon:
+
+```bash
+./build_all_test/bin/test_bitcoin --run_test=peerman_tests --catch_system_error=no --log_level=test_suite -- DEBUG_LOG_OUT -ctammining=1 -ctamresturl=http://127.0.0.1:8080/ -ctamtimeoutms=600000 -printtoconsole=1
+```
+
+### Verification
+
+Verified 2026-07-03 against a live local CTAM daemon on `127.0.0.1:8080`:
+
+- The focused invocation above passes (`*** No errors detected`), mining two
+  blocks through real CTAM jobs and connecting them before the peer-manager
+  assertions run.
+- The plain CTest registration for this suite (`ctest --test-dir
+  build_all_test -R '^peerman_tests$'`), which passes no explicit `-ctam*`
+  flags and therefore relies on the `-ctammining=true` / `-ctamresturl=
+  http://127.0.0.1:8080/` defaults, also passes (`Test #75: peerman_tests
+  ... Passed`).
+- Like `miner_tests`, this suite requires a live CTAM daemon reachable at the
+  configured (or default) REST URL to pass; without one, `SolveHeader()` fails
+  and `MineBlock()` returns a null `COutPoint`, aborting the test via
+  `Assert(!MineBlock(node, block).IsNull())`. That is expected/by-design for
+  this fork, not a defect in the adoption fix.
+- `broken_tests.md` still lists `peerman_tests` under failing tests as of this
+  writing; that entry is stale relative to the above and should be cleared the
+  next time that tracking file is updated.
