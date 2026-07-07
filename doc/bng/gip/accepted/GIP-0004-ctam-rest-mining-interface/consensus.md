@@ -559,6 +559,85 @@ Minimum coverage for this work should include:
 - the first nonce-search implementation uses CTAM's `/mining` job API; CTAM already owns nonce enumeration, padding, and internal CTA-SHA256 block splitting over caller-supplied `payload_hex`, so the missing work is the BNG-side header-to-work mapping plus job polling and cancellation
 - the inherited SHA256d mining loop is retained only as temporary Bitcoin Core compatibility scaffolding and should not be documented as an enduring BNG consensus lane
 
+## Security: reorg-driven state-recovery DoS and the rewind primitive
+
+The CTAM trunk is a stateful shadow of the chainstate. Unlike Bitcoin's
+`CheckProofOfWork(hash, nBits)`, which is a pure function of the header and is
+therefore position-independent, CTAM mining and verification only work when the
+trunk's memory state equals the cumulative state of the active-chain prefix at
+the block being mined or verified. `CommitBranch` moves that state forward by one
+block (the "redo" of a `ConnectTip`). Today there is no backward primitive for a
+`DisconnectTip`. The only way to make the trunk represent an earlier state is
+`AdminReset` followed by replaying the chain forward again, which costs work
+proportional to the whole chain height rather than to the depth of the actual
+disturbance.
+
+That asymmetry is a denial-of-service surface.
+
+### Threat model
+
+Any event that disconnects an active-chain block forces CTAM's trunk to move
+backward: ordinary 1–2 block reorgs, a self-mined block losing a race
+(orphan/stale), an incoming heavier competing branch, an operator
+`invalidateblock`, or eclipse-attack recovery. In a network with any real
+orphan rate this is routine, not exceptional.
+
+If the only recovery is `AdminReset` + replay-from-genesis, an adversary gets a
+severe cost asymmetry. For O(1) attacker cost — publishing valid-proof
+competing blocks that trigger shallow reorgs at the tip — the victim is forced
+to redo O(chain height) of **memory-hard** CTA-SHA256 work to rebuild trunk
+state before it can mine or validate again. The deeper the chain, the cheaper
+the attack relative to the damage. A miner poked this way repeatedly is knocked
+out of consensus for the duration of each rebuild, which itself invites further
+divergence and more forced rebuilds.
+
+This is strictly worse than the equivalent situation in Bitcoin Core, where a
+disconnect is O(reorg depth) because the PoW check carries no state that must be
+rewound.
+
+### Why replay-from-genesis is not merely slow
+
+For some node classes reset + replay is not just expensive, it is impossible,
+which turns the DoS into a hard liveness failure:
+
+- **Pruned nodes** have discarded historical block bodies. Rebuilding trunk
+  state from genesis requires re-reading those bodies to recompute CTA-SHA256
+  inputs (as `SyncCtamToActiveChain` does via `ReadBlock`), so a pruned node
+  cannot replay from genesis at all. It can only supply the recent blocks around
+  a fork point.
+- **Snapshot / assumeutxo-synced nodes** never validated the pre-snapshot
+  history and may not hold those bodies, so genesis replay is unavailable by
+  construction.
+
+For these nodes, a forced backward move with no rewind primitive is
+unrecoverable, not just slow.
+
+### Mitigation: bounded recovery via `POST /admin/rewind`
+
+The `/admin/rewind` primitive specified in `protocol-extension.md` bounds
+recovery cost to the size of the disturbance instead of the size of history:
+
+1. Compare CTAM's live `(bng_height, bng_block_hash)` against the node's active
+   chain to find the common ancestor.
+2. `POST /admin/rewind` with the common-ancestor `(height, hash)` to move the
+   trunk backward to the fork point.
+3. Fast-forward only the new branch's blocks with the existing keep-branch +
+   commit replay loop.
+
+This makes reorg recovery O(reorg depth), matching Bitcoin Core's own
+disconnect cost and removing the attacker's cost asymmetry: a shallow reorg
+costs the victim shallow-reorg work, regardless of chain height. It also makes
+pruned and snapshot-synced nodes recoverable, because rewind operates on CTAM's
+own retained state rather than on block bodies the node no longer has.
+
+Rewind does not weaken validation. The node still validates every block locally
+and treats CTAM as an untrusted execution aid, exactly as the bootstrap and
+fast-forward section above requires. Rewind only changes how cheaply CTAM's
+trunk can be kept congruent with the chain the node has already independently
+accepted. `AdminReset` + replay-from-genesis remains the correct fallback when a
+node cannot supply a valid rewind target (for example, first-time bootstrap, or
+a target CTAM has no record of); rewind is the fast path, not the only path.
+
 ## Summary
 
 The consensus implementation should not treat memory-lane difficulty as a single opaque `nMemBits` value.

@@ -33,3 +33,5 @@ tmp/**
 test/config.ini
 /test/functional/data/fastforward_blockchain/
 .pytest_cache/
+
+.rtk/
