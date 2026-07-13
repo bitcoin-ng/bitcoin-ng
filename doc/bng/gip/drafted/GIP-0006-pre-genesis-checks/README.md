@@ -48,7 +48,7 @@ Included in scope:
 
 - final genesis timestamp selection and verification
 - final DNS seed readiness review
-- increase the total mining limit to 42 million coins and reset the block-reward schedule to 100 coins per block
+- increase the total supply limit to 42 million coins and reset the block-reward schedule to start from 50 coins per block with Bitcoin's 210,000-block halving interval, so the fresh BNG mining epoch issues 21 million on top of the 21 million carried in from the Bitcoin chain
 
 Explicitly out of scope for this draft:
 
