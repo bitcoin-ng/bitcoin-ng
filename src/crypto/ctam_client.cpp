@@ -548,6 +548,43 @@ CtamRestClient::ResetResult CtamRestClient::AdminReset(uint32_t context_size, st
     };
 }
 
+CtamRestClient::RewindResult CtamRestClient::Rewind(uint64_t tip_height, std::string_view tip_block_hash,
+                                                    uint64_t back_to_height, std::string_view back_to_block_hash,
+                                                    std::optional<uint64_t> num_of_commits) const
+{
+    if (tip_block_hash.size() != 64 || back_to_block_hash.size() != 64) {
+        throw std::runtime_error("CTAM rewind requires 64-character BNG block hashes");
+    }
+    if (back_to_height >= tip_height) {
+        throw std::runtime_error("CTAM rewind target must be below the current tip height");
+    }
+    if (num_of_commits && *num_of_commits != tip_height - back_to_height) {
+        throw std::runtime_error("CTAM rewind num_of_commits must equal tip_height - back_to_height");
+    }
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("tip_height", tip_height);
+    payload.pushKV("tip_block_hash", std::string{tip_block_hash});
+    payload.pushKV("back_to_height", back_to_height);
+    payload.pushKV("back_to_block_hash", std::string{back_to_block_hash});
+    if (num_of_commits) {
+        payload.pushKV("num_of_commits", *num_of_commits);
+    }
+
+    const UniValue response = RequestJSON(EVHTTP_REQ_POST, "admin/trunk/rewind", payload.write());
+    return {
+        .status = RequireJSONString(response, "status", "/admin/trunk/rewind"),
+        .old_height = RequireJSONUInt64(response, "old_height", "/admin/trunk/rewind"),
+        .old_block_hash = RequireJSONString(response, "old_block_hash", "/admin/trunk/rewind"),
+        .new_height = RequireJSONUInt64(response, "new_height", "/admin/trunk/rewind"),
+        .new_block_hash = RequireJSONString(response, "new_block_hash", "/admin/trunk/rewind"),
+        .trunk_key = RequireJSONUInt64(response, "trunk_key", "/admin/trunk/rewind"),
+        .applied_entries = RequireJSONUInt64(response, "applied_entries", "/admin/trunk/rewind"),
+        .num_of_commits = RequireJSONUInt64(response, "num_of_commits", "/admin/trunk/rewind"),
+        .remaining_rewind_depth = RequireJSONUInt64(response, "remaining_rewind_depth", "/admin/trunk/rewind"),
+    };
+}
+
 CtamRestClient::StatusResult CtamRestClient::EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const
 {
     ValidateDifficultyTriple(difficulty);

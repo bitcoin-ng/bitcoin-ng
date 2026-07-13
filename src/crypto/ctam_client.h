@@ -118,6 +118,18 @@ public:
         uint64_t branch_count;
     };
 
+    struct RewindResult {
+        std::string status;
+        uint64_t old_height;
+        std::string old_block_hash;
+        uint64_t new_height;
+        std::string new_block_hash;
+        uint64_t trunk_key;
+        uint64_t applied_entries;
+        uint64_t num_of_commits;
+        uint64_t remaining_rewind_depth;
+    };
+
     explicit CtamRestClient(const CTAMClientOptions& options);
 
     UniValue Health() const;
@@ -128,6 +140,9 @@ public:
     CommitBranchResult CommitBranch(uint64_t branch_key) const;
     CommitBranchResult CommitBranch(uint64_t branch_key, uint64_t bng_height, std::string_view bng_block_hash) const;
     ResetResult AdminReset(uint32_t context_size, std::optional<uint64_t> bng_height = std::nullopt, std::optional<std::string_view> bng_block_hash = std::nullopt) const;
+    RewindResult Rewind(uint64_t tip_height, std::string_view tip_block_hash,
+                        uint64_t back_to_height, std::string_view back_to_block_hash,
+                        std::optional<uint64_t> num_of_commits = std::nullopt) const;
     StatusResult EnsureReadyForMining(const CTAMDifficultyTriple& difficulty) const;
     MiningJob StartMiningJob(std::span<const unsigned char> work_bytes,
                              uint32_t nonce_offset,

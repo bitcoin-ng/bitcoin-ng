@@ -157,8 +157,9 @@ This gap was already flagged, but left unresolved, earlier in this GIP's
 > trusted CTAM snapshot/checkpoint and replay the new branch, or rebuild from
 > genesis if no rewind support exists.
 
-No rewind support exists yet. Unlike the resize primitive above, this is not
-covered by the existing admin API, so this section does propose a new endpoint.
+This section originally proposed a new endpoint to fill that gap. It is now
+implemented on the CTAM server as `POST /admin/trunk/rewind`; the shape below
+reflects the implemented transport contract.
 
 ### Concrete failure this causes today
 
@@ -197,77 +198,122 @@ rules, which is exactly the boundary this GIP was designed to avoid crossing.
 The correct fix is therefore giving BNG a way to tell CTAM "go back to the state
 before that commit," not delaying the commit itself.
 
-### Proposed new endpoint: `rewind`
+### Endpoint: `rewind` (implemented)
 
 ```text
-POST /admin/rewind
+POST /admin/trunk/rewind
 ```
+
+This endpoint is now implemented on the CTAM server. It rewinds the current
+trunk tip by one or more committed blocks in a single jump, bounded by a
+retained rewind history window rather than by full chain history (see "Bounded
+rewind window" below). The transport body carries chain metadata for both
+endpoints of the jump — the current tip and the target — so CTAM can validate
+that its retained history actually chains from where BNG believes the trunk is
+down to where BNG wants it.
 
 Request:
 
 ```json
 {
-  "target_bng_height": 100,
-  "target_bng_block_hash": "1fde530c5513121a076e72d6cdd801a14f845c891404353d3e03d4f082a50483"
+  "tip_height": 103,
+  "tip_block_hash": "0000000000000000000000000000000000000000000000000000000000000103",
+  "back_to_height": 100,
+  "back_to_block_hash": "0000000000000000000000000000000000000000000000000000000000000100",
+  "num_of_commits": 3
 }
 ```
 
-- `target_bng_height`: the BNG chain height the trunk should be rewound to.
-- `target_bng_block_hash`: the block hash BNG recorded for that height at
-  commit time (the same value already passed as the `bng_block_hash` argument
-  to `CommitBranch(branch_key, bng_height, bng_block_hash)`).
+- `tip_height` / `tip_block_hash`: the trunk tip BNG believes CTAM is currently
+  on. CTAM rejects the request unless its live `/status` metadata matches these
+  exactly, so a stale caller cannot rewind from a state it has misidentified.
+- `back_to_height` / `back_to_block_hash`: the checkpoint the trunk should be
+  rewound to. The same values BNG recorded for that height at commit time (the
+  `bng_height`/`bng_block_hash` arguments to `CommitBranch`).
+- `num_of_commits` (optional): the number of committed blocks to undo. When
+  present it must equal `tip_height - back_to_height`, acting as an explicit
+  cross-check of the intended jump size.
 
-Both fields are required. CTAM must reject a rewind request that does not match
-a state it actually committed, rather than guessing or interpolating. This
-mirrors why `CommitBranch` already takes `(bng_height, bng_block_hash)` instead
-of only a branch key: BNG's own bookkeeping, not just CTAM's internal branch
-numbering, is the source of truth for which chain state is being referenced.
-The target is identified by hash, not by a CTAM-internal branch key, because
-BNG does not necessarily retain CTAM's branch keys once a branch has been
-committed and superseded by later commits.
+The request does not include a branch key. Rewind walks back from the current
+trunk tip, and the branch states needed to undo those blocks are an internal
+CTAM detail. This mirrors why `CommitBranch` already takes
+`(bng_height, bng_block_hash)`: BNG's own bookkeeping, identified by
+height/hash rather than CTAM-internal branch numbering, is the source of truth
+for which chain state is being referenced, and BNG does not retain CTAM's
+branch keys once a branch has been committed and superseded.
 
-Response (same shape as `GET /status` / `POST /admin/reset`, so BNG can
-validate the outcome the same way `ResetCtamStateForTest()` already validates a
-reset result):
+Response:
 
 ```json
 {
   "status": "rewound",
-  "trunk_key": 100,
-  "context_size": 27,
-  "bng_height": 100,
-  "bng_block_hash": "1fde530c5513121a076e72d6cdd801a14f845c891404353d3e03d4f082a50483",
-  "branch_count": 0
+  "old_height": 103,
+  "old_block_hash": "0000000000000000000000000000000000000000000000000000000000000103",
+  "new_height": 100,
+  "new_block_hash": "0000000000000000000000000000000000000000000000000000000000000100",
+  "trunk_key": 41,
+  "applied_entries": 12345,
+  "num_of_commits": 3,
+  "remaining_rewind_depth": 5
 }
 ```
 
+- `old_*` / `new_*`: the tip before and after the jump.
+- `applied_entries`: total number of trunk bits XORed across the popped branches.
+- `remaining_rewind_depth`: how many rewind operands are still retained after
+  the call, i.e. how many further steps are possible before the client must
+  reconstruct/fast-forward instead.
+
 Error cases:
 
-- `404 Not Found` (or `status: "unknown_state"`): CTAM has no record of a
-  commit matching `(target_bng_height, target_bng_block_hash)`. BNG must not
-  fall back to guessing; the caller should fall back to a full `AdminReset`
-  plus replay from genesis, exactly as it does today.
-- `409 Conflict`: `target_bng_height` is ahead of the current trunk height.
-  Rewind only ever moves backward; moving forward is the existing fast-forward
-  replay path (`POST /crypto/cta_sha256` with `keep_branch = true` followed by
-  `CommitBranch`), not this endpoint.
-- `422 Unprocessable Entity`: malformed request body.
+- `404 Not Found`: rewind history is unavailable or too shallow for the
+  requested jump (the retained window does not reach `back_to_height`). The
+  failed jump consumes no history. The caller falls back to a full `AdminReset`
+  plus replay, exactly as it does today.
+- `409 Conflict`: the live trunk metadata does not match `tip_height` /
+  `tip_block_hash`; or the retained history does not chain contiguously to the
+  requested target (e.g. the target is below the first retained entry, at the
+  genesis boundary); or an active mining job prevents trunk mutation.
+- `422 Unprocessable Entity`: invalid height/hash/context-size, or
+  `num_of_commits` not equal to `tip_height - back_to_height`.
+- `503 Service Unavailable`: persistence failure after applying the branches.
 
 Required behavior:
 
-- Rewind must drop every committed state after the target, not just decrement
-  a counter. Any branch state associated with heights above the target must be
-  discarded so that a subsequent commit at `target_bng_height + 1` behaves
-  identically to a commit that had never been superseded.
+- Rewind undoes committed blocks using GF(2) (XOR) algebra: each committed
+  branch retains the sparse state it XORed into the trunk, and re-applying that
+  same branch (`trunk[idx] = trunk[idx] ^ branch_bit`) undoes exactly that
+  block, because XOR is its own inverse. A jump pops the top
+  `tip_height - back_to_height` branches newest-first and XORs each back out.
+- Rewind must restore `prev_ctx_seed` to the seed in effect at the target
+  checkpoint, not only `trunk.states`: CTA/CXOR uses the seed as part of the
+  next operation's input context, so restoring trunk bits alone would not
+  recreate the previous trunk context. It also moves `trunk_key` back to the
+  target and sets the trunk metadata to `back_to_height`/`back_to_block_hash`.
+- Rewind must drop or orphan every branch state above the target, so that a
+  subsequent commit at `back_to_height + 1` behaves identically to a commit
+  that had never been superseded.
 - Rewind must be a privileged/admin operation, not reachable from the ordinary
   mining hot path (`/mining`, `/crypto/cta_sha256`). It is orchestration, not
   mining, exactly like `/admin/context-size` above.
-- Rewind must be idempotent: calling it again with the same already-current
-  target should succeed as a no-op and return the same response shape.
-- How far back CTAM can rewind (full history since genesis vs. a bounded
-  checkpoint window) is an open question for the CTAM-side implementation, not
-  decided by this note. BNG-side callers must treat "target not found" as
-  always possible and have a fallback (full reset + replay).
+
+#### Bounded rewind window
+
+CTAM retains a bounded LIFO stack of committed branches as rewind operands,
+depth-limited by `rewind_history_depth` (`config.toml`, default 16). On every
+checkpointed commit the committed branch is pushed onto the stack; when the
+depth is exceeded the oldest entry is evicted. The stack is persisted
+(`committed_branches.bin`) atomically with the trunk checkpoint, so the retained
+window survives restart.
+
+Branches are compact but still sparse state maps, so an unbounded journal has no
+clear growth bound. The fixed-depth window matches short reorg handling: BNG
+rewinds the tip by a few blocks and immediately commits replacements. Two things
+invalidate the retained window and force a full reset + replay instead of a
+rewind: a jump deeper than the window (404), and a plain commit with no
+checkpoint metadata, which clears the stack because the trunk mutated without a
+replayable undo record. BNG-side callers must therefore always treat "target
+not available" as possible and keep the full-reset-plus-replay fallback.
 
 ### Rewind and reorg/error-recovery flow
 
@@ -300,18 +346,24 @@ PoW."
 ### Reference implementation touch points
 
 - CTAM server (separate Rust project, outside this repository's `src/` tree):
-  add the `/admin/rewind` endpoint and the trunk-truncation logic it requires.
-  This is the part of this note that is not implementable from the BNG side
-  alone.
-- `src/crypto/ctam_client.h` / `.cpp`: add
-  `RewindResult Rewind(uint64_t target_bng_height, const std::string& target_bng_block_hash) const;`
-  alongside the existing `AdminReset` and `CommitBranch` wrappers.
+  the `/admin/trunk/rewind` endpoint, the retained committed-branch LIFO stack
+  and its XOR-based rewind logic, and `rewind_history_depth` wiring are
+  implemented there. This is the part of this note that is not implementable
+  from the BNG side alone.
+- `src/crypto/ctam_client.h` / `.cpp`: a `Rewind` wrapper carrying the request
+  tuple, alongside the existing `AdminReset` and `CommitBranch` wrappers:
+  `RewindResult Rewind(uint64_t tip_height, std::string_view tip_block_hash, uint64_t back_to_height, std::string_view back_to_block_hash, std::optional<uint64_t> num_of_commits = std::nullopt) const;`
+  (implemented).
 - `src/node/ctam_miner.h` / `.cpp`: teach the reorg/resync path to prefer
   rewind-to-common-ancestor over full reset, falling back to `AdminReset` +
   replay-from-genesis when CTAM reports the target is unknown.
-- `src/test/util/setup_common.cpp`: `SyncCtamToActiveChain()` can switch from
-  unconditional reset-and-replay-from-height-1 to rewind-if-possible, once the
-  endpoint exists, without changing its external behavior or signature.
+- `src/test/util/setup_common.cpp`: `SyncCtamToActiveChain()` now prefers
+  rewind-to-target when CTAM's trunk is ahead of the requested index, falling
+  back to reset-and-replay-from-height-1 when rewind is unavailable, without
+  changing its external behavior or signature. `CreateBlock()` reconciles CTAM
+  to the active tip via this path before solving, so a block committed to CTAM
+  but then rejected by BNG consensus (the double-spend tests) no longer leaves
+  CTAM's trunk stuck ahead of the active chain.
 
 ## Relationship to BNG-0003
 

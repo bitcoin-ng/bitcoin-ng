@@ -435,6 +435,13 @@ CBlock TestChain100Setup::CreateBlock(
     RegenerateCommitments(block, *Assert(m_node.chainman));
 
     if (node::CtamMiningBackend{gArgs}.Enabled()) {
+        // A previous CreateAndProcessBlock may have committed a branch to CTAM
+        // for a block that BNG consensus then rejected, leaving CTAM's trunk
+        // ahead of the active tip. Reconcile CTAM to the active tip (rewinding
+        // when possible) before solving so SolveHeader's trunk-state
+        // precondition holds.
+        const CBlockIndex* tip{WITH_LOCK(::cs_main, return Assert(m_node.chainman)->ActiveChain().Tip())};
+        SyncCtamToActiveChain(tip);
         uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
         if (!node::CtamMiningBackend{gArgs}.SolveHeader(*Assert(m_node.chainman), block, max_tries)) {
             throw std::runtime_error("CTAM failed to solve test block");
@@ -461,6 +468,26 @@ void TestChain100Setup::SyncCtamToActiveChain(const CBlockIndex* pindex)
     const auto status{client.Status()};
     if (status.bng_height == expected_height && status.bng_block_hash == expected_hash) {
         return;
+    }
+
+    // Fast path: if CTAM's trunk is ahead of the target (e.g. a block was
+    // committed to CTAM but later rejected/disconnected by BNG consensus, as in
+    // the double-spend tests), rewind the retained committed branches back to
+    // the target instead of resetting and replaying the whole prefix. Rewind is
+    // bounded by CTAM's retained history, so any failure falls through to the
+    // reset-and-replay path below, which always works.
+    if (status.bng_height && status.bng_block_hash && *status.bng_height > expected_height) {
+        try {
+            client.Rewind(*status.bng_height, *status.bng_block_hash, expected_height, expected_hash,
+                          /*num_of_commits=*/*status.bng_height - expected_height);
+            const auto rewound_status{client.Status()};
+            if (rewound_status.bng_height == expected_height && rewound_status.bng_block_hash == expected_hash) {
+                return;
+            }
+        } catch (const std::exception& e) {
+            LogWarning("CTAM rewind to height %d failed, falling back to reset+replay: %s\n",
+                       pindex->nHeight, e.what());
+        }
     }
 
     const auto reset{client.AdminReset(BNG_MAJOR_WORK_CTX_SIZE_DEFAULT)};

@@ -612,15 +612,16 @@ which turns the DoS into a hard liveness failure:
 For these nodes, a forced backward move with no rewind primitive is
 unrecoverable, not just slow.
 
-### Mitigation: bounded recovery via `POST /admin/rewind`
+### Mitigation: bounded recovery via `POST /admin/trunk/rewind`
 
-The `/admin/rewind` primitive specified in `protocol-extension.md` bounds
+The `/admin/trunk/rewind` primitive specified in `protocol-extension.md` bounds
 recovery cost to the size of the disturbance instead of the size of history:
 
 1. Compare CTAM's live `(bng_height, bng_block_hash)` against the node's active
    chain to find the common ancestor.
-2. `POST /admin/rewind` with the common-ancestor `(height, hash)` to move the
-   trunk backward to the fork point.
+2. `POST /admin/trunk/rewind` with the current tip `(tip_height, tip_block_hash)`
+   and the common-ancestor target `(back_to_height, back_to_block_hash)` to move
+   the trunk backward to the fork point in a single jump.
 3. Fast-forward only the new branch's blocks with the existing keep-branch +
    commit replay loop.
 
@@ -629,6 +630,14 @@ disconnect cost and removing the attacker's cost asymmetry: a shallow reorg
 costs the victim shallow-reorg work, regardless of chain height. It also makes
 pruned and snapshot-synced nodes recoverable, because rewind operates on CTAM's
 own retained state rather than on block bodies the node no longer has.
+
+This holds within the bounded rewind window CTAM retains (`rewind_history_depth`,
+default 16 committed branches). Reorgs shallower than the window — the common
+case — recover by rewind; a reorg deeper than the window, or one past a plain
+non-checkpointed commit that cleared the retained stack, falls back to reset +
+replay. That fallback is still the liveness hazard above for pruned and
+snapshot-synced nodes, so the window depth must be sized for the deepest reorg
+those node classes are expected to absorb without re-syncing.
 
 Rewind does not weaken validation. The node still validates every block locally
 and treats CTAM as an untrusted execution aid, exactly as the bootstrap and
