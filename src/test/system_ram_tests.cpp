@@ -1,4 +1,5 @@
 // Copyright (c) 2025-present The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/license/mit/.
 

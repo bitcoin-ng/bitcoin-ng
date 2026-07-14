@@ -1,3 +1,37 @@
+# Copyright Headers (BNG)
+
+Every source file **added or modified** in this repo must carry a BNG copyright line, in
+addition to (never replacing) any upstream Bitcoin Core / Satoshi copyright lines.
+
+The BNG line is:
+
+```
+// Copyright (c) <year>-present The BNG developers
+```
+
+where `<year>` is the year the file was first authored or modified by BNG (use the current
+year, e.g. `2026`).
+
+Rules:
+- **Modifying an existing Core file**: keep all existing `// Copyright ...` lines and insert
+  the BNG line immediately after the last of them (before the `// Distributed under ...` line).
+- **Adding a new BNG file**: start with the BNG line, then the standard MIT
+  `// Distributed under ... file COPYING ...` two-line notice. If the new file is derived from
+  an upstream Core file, keep the original Core copyright line above the BNG line too.
+- Never write `BNG Developers` or `The Bitcoin-NG developers`; the canonical form is
+  **`The BNG developers`** (matching the `COPYING` file and `src/clientversion.cpp`).
+- Do **not** touch vendored subtrees (`src/leveldb`, `src/secp256k1`, `src/crc32c`,
+  `src/minisketch`, `src/univalue`).
+
+Example (modified Core file):
+
+```
+// Copyright (c) 2009-present The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+```
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
