@@ -162,3 +162,91 @@ Verified 2026-07-03 against a live local CTAM daemon on `127.0.0.1:8080`:
 - `broken_tests.md` still lists `peerman_tests` under failing tests as of this
   writing; that entry is stale relative to the above and should be cleared the
   next time that tracking file is updated.
+
+## CTAM Trunk-State Orchestration In Tests (Rewind / Fast-Forward / Reset+Replay)
+
+CTAM proof-of-work is state-sensitive: solving and verifying a header depends on
+CTAM's trunk being at the block's parent. Test suites, unlike production block
+flow, freely build side branches, process blocks that consensus then rejects,
+and invalidate/reconsider tips. That leaves CTAM's trunk out of sync with the
+chain state the next block must be mined against, so the test scaffolding now
+reconciles trunk state explicitly before every solve.
+
+Client support (`src/crypto/ctam_client.{h,cpp}`):
+
+- `CtamRestClient::Rewind(tip_height, tip_block_hash, back_to_height,
+  back_to_block_hash, num_of_commits)` drives CTAM's rewind endpoint and
+  returns a `RewindResult` (old/new tip, applied entries, remaining rewind
+  depth). Rewind is bounded by CTAM's retained committed-branch history, so
+  callers must treat it as best-effort and keep a fallback.
+
+Linear reconciliation (`TestChain100Setup::SyncCtamToActiveChain()` in
+`src/test/util/setup_common.cpp`), used by `CreateBlock()` before each
+`SolveHeader()`:
+
+1. No-op fast path when CTAM's trunk already matches the BNG active tip (the
+   common case in the happy path).
+2. Rewind fast path when the trunk is *ahead* of the active tip — e.g. a block
+   was committed to CTAM but then rejected by BNG consensus, as in the
+   double-spend cases of `txvalidationcache_tests`. The trunk is rewound by
+   `trunk_height - tip_height` commits and verified against the tip hash.
+3. Fallback: `AdminReset` followed by a full replay of the active chain prefix
+   (re-posting each header's work bytes with `keep_branch=true` and committing
+   the branch at its height). This always works but is O(height).
+
+Branch-aware reconciliation (`MinerTestingSetup::SyncCtamToHeaderChain()` in
+`src/test/validation_block_tests.cpp`), needed because that suite mines on
+arbitrary branches of a randomly generated block tree:
+
+- Finds the last common ancestor of CTAM's current trunk block and the target
+  parent, rewinds back to it, then replays the target branch's headers forward
+  (fast-forward). Headers are reconstructed losslessly from the block index.
+- A rewind all the way past the first commit is a genesis-boundary 409 by
+  contract, so genesis targets are matched against the freshly-reset trunk
+  state (trunk_key 0, no checkpoint metadata) instead.
+- Any rewind/replay failure falls back to reset + full replay from genesis.
+
+Related validation-side change (`src/node/blockstorage.cpp`,
+`LoadBlockIndexGuts()`): headers reloaded from the block-index DB skip the
+stateless `CheckProofOfWork()` nBits check when CTAM mining is enabled, since
+CTAM proof cannot be re-derived from the header hash alone and those headers
+were fully validated before being written. This mirrors the equivalent skip in
+`CheckBlockHeader()` and unblocked the snapshot/chainstate suites
+(`validation_chainstate_tests`, `validation_chainstatemanager_tests`,
+`validation_block_tests`).
+
+## Test Logging And Difficulty Tuning (2026-07-14)
+
+CTAM mining used to emit three unconditional `LogPrintf` lines per solved block
+(job start, job id, job completion). Fixture-heavy suites mine 100+ blocks per
+test case, so failure output (and `-printtoconsole=1` debugging sessions) was
+dominated by this noise.
+
+- A dedicated `ctam` debug-log category was added (`BCLog::CTAM` in
+  `src/logging.h` / `src/logging.cpp`).
+- The per-block mining lifecycle logs in `src/node/ctam_miner.cpp` were demoted
+  to `LogDebug(BCLog::CTAM, ...)`. They are silent by default; re-enable them
+  when debugging with `-debug=ctam` (add `-printtoconsole=1` for unit-test
+  runs). Warnings and errors (poll timeouts, rewind fallbacks, PoW validation
+  failures) are unchanged and still print unconditionally.
+
+Miner-test energy difficulty was reduced again. `miner_tests` runs on main-net
+params, whose inherited target made the 110-block bootstrap loop the slowest
+part of the whole suite (~560 s). The `-ctamtestdiffbits` override constant
+`CTAM_MINER_TEST_ENERGY_BITS` in `src/test/miner_tests.cpp` went from
+`0x1f3fffc0` (1-in-1024 digests pass, "64x easier than genesis") to
+`0x207fffff` (1-in-2 digests pass — the same target as the regtest genesis and
+the practical floor of the compact encoding). The CTAM digest/target comparison
+(`DigestMeetsTarget`) is not clamped by `powLimit`, and
+`ContextualCheckBlockHeader()` accepts the override via `-ctamtestdiffbits`,
+so no consensus-code change is involved. Regtest fixtures already mine at
+`0x207fffff` via `GetNextWorkRequired`, so only `miner_tests` needed this.
+
+## Full-Suite Status (2026-07-14, live CTAM daemon)
+
+`./run-all-tests.sh` against `38720f51d6` plus the logging/difficulty changes
+above: **158/158 passed, 0 failed** (`ctam_rest_client_tests` skipped as
+usual — it only runs with `-ctam=1`). The three snapshot/chainstate suites
+previously tracked as broken all pass; `broken_tests.md` was updated to match.
+Suites that mine through CTAM remain dependent on a live daemon at the default
+`127.0.0.1:8080` REST URL and fail in the fixture constructor without one.

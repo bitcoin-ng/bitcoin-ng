@@ -11,6 +11,7 @@ Companion notes in this directory:
 - [consensus.md](consensus.md) - consensus-side implementation plan for the memory lane
 - [plan.md](plan.md) - implementation sequencing and code ownership
 - [protocol-extension.md](protocol-extension.md) - REST workflow, resize, and stale-work handling
+- [persistent-http-transport.md](persistent-http-transport.md) - persistent HTTP connection proposal for mining jobs
 - [tests.md](tests.md) - targeted validation guidance
 
 ## Motivation

@@ -15,40 +15,41 @@ Apply fixes only one test at a time, and verify that the fix works by re-running
 
 ## List of broken tests
 
-### Current run (2026-07-13, CTAM daemon up)
+### Current run (2026-07-14, CTAM daemon up, at 38720f51d6)
 
-3 tests failed out of 158.
+**0 tests failed out of 158 — suite is clean.**
 
 The following tests did not run:
-         41 - ctam_rest_client_tests (Skipped)
+         41 - ctam_rest_client_tests (Skipped — only runs with `-ctam=1`)
 
-The following tests FAILED:
- - [ ] 135 - validation_block_tests (SEGFAULT)
- - [ ] 136 - validation_chainstate_tests (Failed)
- - [ ] 137 - validation_chainstatemanager_tests (Failed)
+Fixed since the prior list (all three shared the assumeutxo/snapshot family
+root cause; resolved by the branch-aware CTAM trunk reconcile in
+`validation_block_tests.cpp` and the CTAM-aware `LoadBlockIndexGuts()` PoW
+skip in `blockstorage.cpp`, commits bb350ab2b8 + 38720f51d6):
+ - [x] 135 - validation_block_tests (was SEGFAULT)
+ - [x] 136 - validation_chainstate_tests
+ - [x] 137 - validation_chainstatemanager_tests
 
-All three share the same root cause: **assumeutxo / UTXO-snapshot activation**.
-The chain built by the test fixtures under CTAM mining produces a different tip
-hash at the assumeutxo snapshot heights than the hashes hardcoded in the regtest
-`m_assumeutxo_data` chainparams. The snapshot is written correctly, but
-`ActivateSnapshot` rejects it because its base hash is not registered:
+Notable timings from this run (candidates for speedups, not failures):
+ - miner_tests: 561 s at the old `CTAM_MINER_TEST_ENERGY_BITS{0x1f3fffc0}`;
+   now reduced to `0x207fffff` (~2 CTAM attempts per block) — expect a large
+   drop on the next run.
+ - validation_chainstatemanager_tests: 102 s, validation_block_tests: 87 s,
+   interfaces_tests: 51 s, miniminer_tests: 42 s (fixture mining REST
+   round-trips dominate).
 
-```
-[error] ActivateSnapshot failed: assumeutxo block hash in snapshot metadata not
-recognized (hash: ade1b170b3dbad502c7d566cd4776d59575ac7ba92ab210162556e43f7451244).
-The following snapshot heights are available: 110, 200, 299
-test/validation_chainstatemanager_tests.cpp:266: fatal error: ... critical check
-CreateAndActivateUTXOSnapshot(this) has failed
-```
+All CTAM-mining suites require a live CTAM daemon at 127.0.0.1:8080; without
+one the fixture constructor fails (see previous-run section below).
 
-`validation_block_tests` segfaults rather than asserting, but is in the same
-snapshot/chainstate family and is expected to share the cause.
+### Prior run (2026-07-13, CTAM daemon up)
 
-Open question to confirm during analysis: is this a pre-existing branch issue
-(stale hardcoded assumeutxo hashes vs. CTAM-mined chain) or newly introduced?
-The rewind/`setup_common` reconcile change does not alter block header contents
-or the winning nonce in the happy path (reconcile is a no-op when CTAM is
-already at the tip), so it is not the expected cause.
+3 tests failed out of 158: validation_block_tests (SEGFAULT),
+validation_chainstate_tests, validation_chainstatemanager_tests. Root cause
+was the assumeutxo/UTXO-snapshot activation family: `ActivateSnapshot`
+rejected the fixture-built chain's snapshot base hash
+(`assumeutxo block hash in snapshot metadata not recognized`), and
+validation_block_tests segfaulted in the same snapshot/chainstate family.
+Resolved as noted above.
 
 ### Previous run (CTAM daemon down — environmental, all fixtures failed)
 

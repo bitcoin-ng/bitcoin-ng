@@ -72,7 +72,7 @@ struct MinerTestingSetup : public TestingSetup {
 BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
-static constexpr unsigned int CTAM_MINER_TEST_ENERGY_BITS{0x1f3fffc0}; // 64x easier than 0x1f00ffff
+static constexpr unsigned int CTAM_MINER_TEST_ENERGY_BITS{0x207fffff}; // ~2 attempts per block; same target as the regtest genesis
 
 constexpr static struct {
     unsigned int extranonce;
@@ -710,15 +710,23 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         {
             // A block template does not have proof-of-work, but it might pass
             // verification by coincidence. Grind the nonce if needed:
-            if (ctam_mining.Enabled()) {
-                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
-            }
-            while (CheckProofOfWork(block.GetHash(), block.nBits, Assert(m_node.chainman)->GetParams().GetConsensus())) {
-                block.nNonce++;
-            }
-
             std::string reason;
             std::string debug;
+            if (ctam_mining.Enabled()) {
+                // CTAM proof-of-work is a server-side digest-vs-target check,
+                // so grind the nonce against checkBlock itself until the
+                // digest misses the target; at the easy test bits an unsolved
+                // header passes by coincidence with probability ~1/2.
+                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
+                while (mining->checkBlock(block, {.check_pow = true}, reason, debug)) {
+                    block.nNonce++;
+                }
+            } else {
+                while (CheckProofOfWork(block.GetHash(), block.nBits, Assert(m_node.chainman)->GetParams().GetConsensus())) {
+                    block.nNonce++;
+                }
+            }
+
             BOOST_REQUIRE(!mining->checkBlock(block, {.check_pow = true}, reason, debug));
             BOOST_REQUIRE_EQUAL(reason, "high-hash");
             BOOST_REQUIRE_EQUAL(debug, "proof of work failed");
