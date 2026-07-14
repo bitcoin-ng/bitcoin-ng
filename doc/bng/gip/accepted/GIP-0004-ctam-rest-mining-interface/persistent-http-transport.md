@@ -1,6 +1,6 @@
 # Persistent HTTP Transport for CTAM Mining
 
-**Status**: proposed
+**Status**: implemented (see tests.md, 2026-07-14 record, for measurements)
 **Created**: 2026-07-14
 
 ## Abstract
@@ -207,3 +207,7 @@ secure transport and authentication model.
 ## Changelog
 
 - 2026-07-14: initial proposal
+- 2026-07-14: implemented in `CtamRestClient` (persistent session, unsafe-state
+  invalidation, GET-only single retry, per-client request serialization);
+  measurements and the companion adaptive poll-interval change are recorded in
+  `tests.md`

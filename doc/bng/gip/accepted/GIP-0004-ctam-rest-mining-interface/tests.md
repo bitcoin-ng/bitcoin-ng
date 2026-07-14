@@ -250,3 +250,115 @@ usual — it only runs with `-ctam=1`). The three snapshot/chainstate suites
 previously tracked as broken all pass; `broken_tests.md` was updated to match.
 Suites that mine through CTAM remain dependent on a live daemon at the default
 `127.0.0.1:8080` REST URL and fail in the fixture constructor without one.
+
+## Persistent HTTP Transport And Adaptive Mining Poll (2026-07-14)
+
+Two REST-interaction speedups landed for the CTAM-mining test suites; both
+keep CTAM doing all server-side mining (no test shortcuts around the daemon).
+
+### 1. Persistent HTTP/1.1 transport (implements `persistent-http-transport.md`)
+
+`CtamRestClient` now owns a reusable transport session (libevent event base +
+`evhttp_connection`) instead of creating a connection and sending
+`Connection: close` for every request:
+
+- The session is created lazily on the first request and reused across
+  status, mining start, polls, replay, and commit for the lifetime of the
+  client instance. The mining backend and the fixture's
+  `SyncCtamToActiveChain()` already use one client per logical operation, so
+  each block now costs 1-2 TCP connections instead of ~8.
+- The transport is discarded and transparently recreated after connect
+  failures, timeouts, EOF, framing errors, or malformed (non-JSON) response
+  bodies — any state where connection reuse would be unsafe.
+- If a request written to a reused connection fails (a server may drop an
+  idle keep-alive connection at any time), the client reconnects and retries
+  exactly once — but only for idempotent GETs and never after a timeout.
+  State-changing POSTs keep their previous failure behaviour and are never
+  automatically duplicated.
+- Requests are serialized on a per-client mutex; one HTTP/1.1 connection must
+  not carry interleaved requests from concurrent callers.
+- Connection lifecycle events log under `-debug=ctam`.
+
+Files: `src/crypto/ctam_client.{h,cpp}` (transport hidden behind a private
+`Transport` impl struct so libevent types stay out of the public header).
+
+### 2. Adaptive mining-job poll interval
+
+`CtamMiningBackend::SolveHeader()` used to sleep a fixed 50 ms before the
+*first* `GET /mining/{job_id}` poll. Loopback measurements against the live
+daemon showed an easy-difficulty job (~2 attempts) reaches a terminal state in
+~15 ms, `GET /status` costs ~2.5 ms, and a `POST /crypto/cta_sha256` replay
+~13 ms — so the fixed sleep, not TCP setup, dominated per-block fixture cost.
+Polling now starts at 1 ms and backs off exponentially to the unchanged 50 ms
+cap (`CTAM_MINING_INITIAL_POLL_INTERVAL` in `src/node/ctam_miner.cpp`), so
+fast test jobs are picked up almost immediately while long production jobs
+poll at the same 50 ms rate as before.
+
+### Measured suite timings (live CTAM daemon, same machine, same difficulty)
+
+| Suite | Before | After | Notes |
+|---|---|---|---|
+| miner_tests | 561 s | 6.0 s | bulk of the drop from the `0x207fffff` energy-bits change recorded above; transport + poll changes remove most of the rest |
+| miniminer_tests | 42 s | 20.3 s | transport alone: 40.4 s; adaptive poll took it to 20.3 s |
+| validation_block_tests | 87 s | 42.6 s | |
+| validation_chainstatemanager_tests | 102 s | 51.0 s | |
+| interfaces_tests | 51 s | 24.6 s | |
+
+Takeaway: persistent connections alone bought little on loopback (~1.5 s of
+miniminer's 42 s) because local TCP setup is cheap; the first-poll sleep was
+the dominant fixed overhead. The remaining ~40 ms per fixture block is genuine
+CTAM server work (mining job ~15 ms + verification replay ~13 ms + status and
+commit round-trips), so further test speedups would need fewer REST operations
+per block, not a faster transport. Persistent transport still removes
+per-request socket churn and matters more for remote/production deployments.
+
+Verification: `ctam_rest_client_tests` passes with `-- -ctam=1` (5 cases,
+covering the job lifecycle over one reused connection), and the suites above
+all pass individually against the live daemon.
+
+## Full-Suite History And Triage Notes (2026-07-14, absorbed from `broken_tests.md`)
+
+The repo-root `broken_tests.md` tracker is being retired; the durable insights
+from it live here now.
+
+### Latest full-suite run
+
+`./run-all-tests.sh` with the persistent HTTP transport and adaptive poll
+changes (on top of `38720f51d6`): **158/158 passed, 0 failed**, total test
+time 376 s. `ctam_rest_client_tests` is skipped in suite runs (it only
+executes with `-- -ctam=1`) but passes when run manually against the live
+daemon. Full-suite timings for the previously slow CTAM suites:
+validation_block_tests 52.8 s, validation_chainstatemanager_tests 50.8 s,
+interfaces_tests 24.5 s, miniminer_tests 20.0 s, miner_tests 6.0 s (slightly
+above their standalone timings due to suite-level contention on the shared
+CTAM daemon).
+
+### Triage workflow that worked
+
+- `./run-all-tests.sh` rebuilds the test binaries and runs everything with a
+  pass/fail summary; use it to refresh the overall state.
+- Fix one test at a time and re-run the affected suite(s) after each change
+  to isolate the impact before moving on.
+
+### Root causes fixed along the way (for future debugging reference)
+
+- **assumeutxo/snapshot family** (validation_block_tests SEGFAULT,
+  validation_chainstate_tests, validation_chainstatemanager_tests):
+  `ActivateSnapshot` rejected the fixture-built chain's snapshot base hash
+  ("assumeutxo block hash in snapshot metadata not recognized"). Resolved by
+  the branch-aware CTAM trunk reconcile in `validation_block_tests.cpp` plus
+  the CTAM-aware `LoadBlockIndexGuts()` PoW skip in `blockstorage.cpp`
+  (commits `bb350ab2b8` + `38720f51d6`).
+- **txvalidationcache_tests**: fixed by the rewind reconcile in the fixture's
+  `CreateBlock` — a previously committed CTAM branch for a block that BNG
+  consensus later rejected left CTAM's trunk ahead of the active tip;
+  `SyncCtamToActiveChain()` rewinds (or reset-and-replays) before solving.
+- **peerman_tests**: fixed in the same fixture-reconcile family.
+
+### Known environmental failure signature
+
+Every CTAM-mining suite needs a live CTAM daemon at the default
+`127.0.0.1:8080`. Without one, fixtures fail in the constructor
+(`ResetCtamStateForTest()`) with `Could not connect to CTAM REST service at
+127.0.0.1:8080`. A whole-suite wipeout with that message is environmental,
+not a code regression — start the daemon and re-run.

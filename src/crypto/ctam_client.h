@@ -10,6 +10,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -131,6 +133,7 @@ public:
     };
 
     explicit CtamRestClient(const CTAMClientOptions& options);
+    ~CtamRestClient();
 
     UniValue Health() const;
     StatusResult Status() const;
@@ -162,12 +165,26 @@ public:
                            bool keep_branch = false) const;
 
 private:
+    //! Reusable libevent transport state (event base + persistent HTTP/1.1
+    //! connection). Created lazily, discarded whenever connection reuse would
+    //! be unsafe, and recreated on the next request.
+    struct Transport;
+
     UniValue RequestJSON(int method, std::string_view path, std::string_view body = {}) const;
+    //! Perform one request attempt on the persistent transport. Requires
+    //! m_transport_mutex to be held by the caller.
+    UniValue RequestOnce(int method, const std::string& target, std::string_view body) const;
+    Transport& EnsureTransport() const;
+    void ResetTransport() const;
 
     std::string m_host;
     uint16_t m_port;
     std::string m_target_prefix;
     int m_timeout_ms;
+    //! Serializes requests: one HTTP/1.1 connection must not carry
+    //! interleaved requests from concurrent callers.
+    mutable std::mutex m_transport_mutex;
+    mutable std::unique_ptr<Transport> m_transport;
 };
 
 #endif // BITCOIN_CRYPTO_CTAM_CLIENT_H

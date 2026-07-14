@@ -22,6 +22,10 @@ namespace node {
 namespace {
 
 constexpr int DEFAULT_CTAM_TIMEOUT_MS{5000};
+//! First poll delay after starting a mining job. Easy-difficulty jobs (tests)
+//! finish in a few milliseconds, so start polling almost immediately and back
+//! off exponentially towards CTAM_MINING_POLL_INTERVAL for longer jobs.
+constexpr auto CTAM_MINING_INITIAL_POLL_INTERVAL{std::chrono::milliseconds{1}};
 constexpr auto CTAM_MINING_POLL_INTERVAL{std::chrono::milliseconds{50}};
 
 std::array<unsigned char, CtamRestClient::OUTPUT_SIZE> CompactTargetFromBits(unsigned int bits)
@@ -172,12 +176,14 @@ bool CtamMiningBackend::SolveHeader(const util::SignalInterrupt& interrupt, CBlo
              expected_trunk_height + 1, header.GetHash().ToString(), header.nBits, nonce_start, nonce_end);
     CtamRestClient::MiningJob job = client.StartMiningJob(work.work_bytes, work.nonce_offset, nonce_start, nonce_end, difficulty, /*initial_state=*/{}, /*keep_branch=*/true);
     LogDebug(BCLog::CTAM, "CTAM mining job %s started for block_hash=%s\n", job.job_id, header.GetHash().ToString());
+    auto poll_interval{CTAM_MINING_INITIAL_POLL_INTERVAL};
     while (!job.IsTerminal()) {
         if (interrupt) {
             client.StopMiningJob(job.job_id);
             return false;
         }
-        std::this_thread::sleep_for(CTAM_MINING_POLL_INTERVAL);
+        std::this_thread::sleep_for(poll_interval);
+        poll_interval = std::min(poll_interval * 2, CTAM_MINING_POLL_INTERVAL);
         try {
             job = client.GetMiningJob(job.job_id);
         } catch (const CtamRestError& e) {

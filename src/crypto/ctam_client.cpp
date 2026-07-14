@@ -4,6 +4,7 @@
 
 #include <crypto/ctam_client.h>
 
+#include <logging.h>
 #include <support/events.h>
 #include <univalue.h>
 #include <util/strencodings.h>
@@ -16,6 +17,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -24,6 +27,7 @@
 namespace {
 
 struct HTTPReply {
+    struct event_base* base{nullptr};
     int status{0};
     int error{-1};
     std::string body;
@@ -54,6 +58,9 @@ void HTTPRequestDone(struct evhttp_request* req, void* ctx)
     auto* reply = static_cast<HTTPReply*>(ctx);
     if (req == nullptr) {
         reply->status = 0;
+        // A persistent connection can keep the event base busy after a failed
+        // request, so end the dispatch loop explicitly.
+        if (reply->base != nullptr) event_base_loopbreak(reply->base);
         return;
     }
 
@@ -65,6 +72,9 @@ void HTTPRequestDone(struct evhttp_request* req, void* ctx)
         }
         evbuffer_drain(buf, size);
     }
+    // Without Connection: close the idle keep-alive connection would keep the
+    // event base dispatching; return control to the caller instead.
+    if (reply->base != nullptr) event_base_loopbreak(reply->base);
 }
 
 void HTTPErrorCallback(enum evhttp_request_error err, void* ctx)
@@ -381,6 +391,14 @@ bool CtamRestClient::MiningJob::IsTerminal() const
     return status == "completed" || status == "stopped" || status == "failed";
 }
 
+//! Persistent HTTP/1.1 transport session: the event base and connection are
+//! reused across requests until an error makes reuse unsafe (see GIP-0004
+//! persistent-http-transport).
+struct CtamRestClient::Transport {
+    raii_event_base base;
+    raii_evhttp_connection connection;
+};
+
 CtamRestClient::CtamRestClient(const CTAMClientOptions& options)
     : m_timeout_ms{options.timeout_ms}
 {
@@ -394,13 +412,35 @@ CtamRestClient::CtamRestClient(const CTAMClientOptions& options)
     m_target_prefix = parsed.target_prefix;
 }
 
-UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::string_view body) const
+CtamRestClient::~CtamRestClient() = default;
+
+CtamRestClient::Transport& CtamRestClient::EnsureTransport() const
 {
-    raii_event_base base = obtain_event_base();
-    raii_evhttp_connection connection = obtain_evhttp_connection_base(base.get(), m_host, m_port);
-    evhttp_connection_set_timeout(connection.get(), std::max(1, static_cast<int>(std::ceil(m_timeout_ms / 1000.0))));
+    if (!m_transport) {
+        auto transport = std::make_unique<Transport>();
+        transport->base = obtain_event_base();
+        transport->connection = obtain_evhttp_connection_base(transport->base.get(), m_host, m_port);
+        evhttp_connection_set_timeout(transport->connection.get(), std::max(1, static_cast<int>(std::ceil(m_timeout_ms / 1000.0))));
+        m_transport = std::move(transport);
+        LogDebug(BCLog::CTAM, "CTAM REST transport session created for %s:%u\n", m_host, m_port);
+    }
+    return *m_transport;
+}
+
+void CtamRestClient::ResetTransport() const
+{
+    if (m_transport) {
+        LogDebug(BCLog::CTAM, "CTAM REST transport session to %s:%u discarded\n", m_host, m_port);
+        m_transport.reset();
+    }
+}
+
+UniValue CtamRestClient::RequestOnce(int method, const std::string& target, std::string_view body) const
+{
+    Transport& transport = EnsureTransport();
 
     HTTPReply response;
+    response.base = transport.base.get();
     raii_evhttp_request request = obtain_evhttp_request(HTTPRequestDone, &response);
     if (request == nullptr) {
         throw std::runtime_error("Failed to create CTAM REST request");
@@ -410,7 +450,6 @@ UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::str
 
     if (auto* headers = evhttp_request_get_output_headers(request.get())) {
         evhttp_add_header(headers, "Host", m_host.c_str());
-        evhttp_add_header(headers, "Connection", "close");
         if (method == EVHTTP_REQ_POST) {
             evhttp_add_header(headers, "Content-Type", "application/json");
         }
@@ -422,13 +461,17 @@ UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::str
         }
     }
 
-    if (evhttp_make_request(connection.get(), request.get(), static_cast<evhttp_cmd_type>(method), BuildTarget(m_target_prefix, path).c_str()) != 0) {
+    if (evhttp_make_request(transport.connection.get(), request.get(), static_cast<evhttp_cmd_type>(method), target.c_str()) != 0) {
+        ResetTransport();
         throw std::runtime_error("Failed to dispatch CTAM REST request");
     }
     request.release();
-    event_base_dispatch(base.get());
+    event_base_dispatch(transport.base.get());
 
     if (response.status == 0) {
+        // Connect failure, timeout, EOF, or a framing error: the connection
+        // state is unknown, so it must not carry another request.
+        ResetTransport();
         throw CtamRestError{"Could not connect to CTAM REST service at " + m_host + ":" + std::to_string(m_port) +
                                 " (" + HTTPErrorString(response.error) + ")",
                             response.error};
@@ -437,7 +480,36 @@ UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::str
         throw std::runtime_error("CTAM REST endpoint returned HTTP " + std::to_string(response.status));
     }
 
-    return ParseJSONObject(response.body);
+    try {
+        return ParseJSONObject(response.body);
+    } catch (...) {
+        // A malformed response body means the byte stream cannot be trusted.
+        ResetTransport();
+        throw;
+    }
+}
+
+UniValue CtamRestClient::RequestJSON(int method, std::string_view path, std::string_view body) const
+{
+    std::lock_guard lock{m_transport_mutex};
+
+    const std::string target = BuildTarget(m_target_prefix, path);
+    const bool reused_connection = m_transport != nullptr;
+    try {
+        return RequestOnce(method, target, body);
+    } catch (const CtamRestError& e) {
+        // The server may close an idle keep-alive connection at any time; a
+        // request written to such a connection fails without ever reaching
+        // CTAM. Reconnect and retry exactly once, but only for idempotent
+        // GETs: a state-changing POST must not be duplicated after an
+        // ambiguous failure, and a timeout means the request may still be in
+        // flight server-side.
+        if (method != EVHTTP_REQ_GET || !reused_connection || e.IsTimeout()) {
+            throw;
+        }
+        LogDebug(BCLog::CTAM, "CTAM REST GET %s failed on a reused connection (%s); reconnecting for one retry\n", target, e.what());
+        return RequestOnce(method, target, body);
+    }
 }
 
 UniValue CtamRestClient::Health() const
