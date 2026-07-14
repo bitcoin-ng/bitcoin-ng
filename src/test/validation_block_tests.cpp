@@ -5,8 +5,12 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chainparams.h>
+#include <common/args.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <crypto/ctam_client.h>
+#include <crypto/ctam_mining.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <pow.h>
 #include <random.h>
@@ -27,6 +31,7 @@ struct MinerTestingSetup : public RegTestingSetup {
     std::shared_ptr<const CBlock> GoodBlock(const uint256& prev_hash);
     std::shared_ptr<const CBlock> BadBlock(const uint256& prev_hash);
     std::shared_ptr<CBlock> FinalizeBlock(std::shared_ptr<CBlock> pblock);
+    void SyncCtamToHeaderChain(const CBlockIndex* target);
     void BuildChain(const uint256& root, int height, const unsigned int invalid_rate, const unsigned int branch_rate, const unsigned int max_size, std::vector<std::shared_ptr<const CBlock>>& blocks);
 };
 } // namespace validation_block_tests
@@ -90,6 +95,79 @@ std::shared_ptr<CBlock> MinerTestingSetup::Block(const uint256& prev_hash)
     return pblock;
 }
 
+//! Reconcile CTAM's trunk with the header-chain state at `target`, which may
+//! sit on any branch of the block tree. Backward/sideways moves rewind CTAM's
+//! retained committed branches to the last common ancestor and then replay the
+//! target branch's headers forward; when the jump exceeds the retained rewind
+//! window (or crosses the genesis boundary), fall back to reset + full replay.
+void MinerTestingSetup::SyncCtamToHeaderChain(const CBlockIndex* target)
+{
+    const node::CtamMiningOptions options{node::GetCtamMiningOptions(gArgs)};
+    if (!options.enabled) return;
+    BOOST_REQUIRE(target != nullptr);
+
+    CtamRestClient client{options.client_options};
+
+    // Replay headers (base, target] onto the trunk, oldest first. The CTAM
+    // work bytes derive from the full BNG header, which the block index
+    // reconstructs losslessly.
+    const auto replay_headers{[&](const CBlockIndex* base) {
+        std::vector<const CBlockIndex*> indices;
+        for (const CBlockIndex* walk{target}; walk != base; walk = walk->pprev) {
+            BOOST_REQUIRE(walk != nullptr);
+            indices.push_back(walk);
+        }
+        for (auto it = indices.rbegin(); it != indices.rend(); ++it) {
+            const CBlockHeader header{(*it)->GetBlockHeader()};
+            const CtamHeaderMiningWork work{BuildCtamHeaderMiningWork(header)};
+            const auto branch{client.PostCtaSha256Message(work.work_bytes, node::BuildCtamDifficulty(header), /*keep_branch=*/true)};
+            BOOST_REQUIRE(branch.branch_kept);
+            const auto commit{client.CommitBranch(branch.branch_key, static_cast<uint64_t>((*it)->nHeight), (*it)->GetBlockHash().ToString())};
+            BOOST_REQUIRE_EQUAL(commit.status, "committed");
+        }
+    }};
+
+    const auto matches_target{[&](const CtamRestClient::StatusResult& status) {
+        // The freshly reset trunk carries no checkpoint metadata and is the
+        // canonical state for a genesis target (see RequireCtamTrunkState).
+        if (target->nHeight == 0 && status.trunk_key == 0 && !status.bng_height && !status.bng_block_hash) {
+            return true;
+        }
+        return status.bng_height == static_cast<uint64_t>(target->nHeight) &&
+               status.bng_block_hash == target->GetBlockHash().ToString();
+    }};
+
+    const auto status{client.Status()};
+    if (matches_target(status)) return;
+
+    if (status.bng_height && status.bng_block_hash) {
+        const auto ctam_tip_hash{uint256::FromHex(*status.bng_block_hash)};
+        const CBlockIndex* ctam_tip{ctam_tip_hash ? WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(*ctam_tip_hash)) : nullptr};
+        const CBlockIndex* ancestor{ctam_tip ? LastCommonAncestor(ctam_tip, target) : nullptr};
+        // A rewind to the pre-first-commit state is a genesis-boundary 409 by
+        // contract, so only rewind to ancestors at height >= 1.
+        if (ancestor != nullptr && ancestor->nHeight > 0) {
+            try {
+                if (ancestor != ctam_tip) {
+                    client.Rewind(*status.bng_height, *status.bng_block_hash,
+                                  static_cast<uint64_t>(ancestor->nHeight), ancestor->GetBlockHash().ToString(),
+                                  /*num_of_commits=*/*status.bng_height - static_cast<uint64_t>(ancestor->nHeight));
+                }
+                replay_headers(ancestor);
+                if (matches_target(client.Status())) return;
+            } catch (const std::exception& e) {
+                LogWarning("CTAM rewind to height %d failed, falling back to reset+replay: %s\n",
+                           ancestor->nHeight, e.what());
+            }
+        }
+    }
+
+    const auto reset{client.AdminReset(BNG_MAJOR_WORK_CTX_SIZE_DEFAULT)};
+    BOOST_REQUIRE_EQUAL(reset.status, "reset");
+    replay_headers(WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Genesis()));
+    BOOST_REQUIRE(matches_target(client.Status()));
+}
+
 std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock> pblock)
 {
     const CBlockIndex* prev_block{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
@@ -97,8 +175,17 @@ std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock>
 
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
-    while (!CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
-        ++(pblock->nNonce);
+    if (node::CtamMiningBackend{gArgs}.Enabled()) {
+        // CTAM proof-of-work is solved against the trunk state at the block's
+        // parent, which may be on any branch of the tree this suite builds.
+        SyncCtamToHeaderChain(prev_block);
+        uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
+        BOOST_REQUIRE(node::CtamMiningBackend{gArgs}.SolveHeader(m_node.chainman->m_interrupt, *pblock, max_tries,
+                                                                 prev_block->nHeight, prev_block->GetBlockHash()));
+    } else {
+        while (!CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+            ++(pblock->nNonce);
+        }
     }
 
     // submit block header, so that miner can get the block height from the
