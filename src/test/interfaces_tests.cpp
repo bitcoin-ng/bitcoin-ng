@@ -1,4 +1,5 @@
 // Copyright (c) 2020-2022 The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -105,6 +106,7 @@ BOOST_AUTO_TEST_CASE(findCommonAncestor)
         m_node.chainman->ActiveChainstate().InvalidateBlock(state, active.Tip());
     }
     BOOST_CHECK_EQUAL(active.Height(), orig_tip->nHeight - 10);
+    SyncCtamToActiveChain(active.Tip());
     coinbaseKey.MakeNewKey(true);
     for (int i = 0; i < 20; ++i) {
         CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));

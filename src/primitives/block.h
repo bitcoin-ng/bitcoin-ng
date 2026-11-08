@@ -1,5 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +11,15 @@
 #include <serialize.h>
 #include <uint256.h>
 #include <util/time.h>
+
+#include <cstddef>
+#include <cstdint>
+
+static constexpr size_t BNG_HEADER_V1_SIZE = 115;
+static constexpr size_t BNG_HEADER_V1_NONCE_OFFSET = 111;
+static constexpr uint16_t BNG_MAJOR_WORK_CTX_SIZE_DEFAULT = 27;
+static constexpr uint8_t BNG_MINOR_WORK_ROUNDS_MAX = 64;
+static constexpr uint8_t BNG_MINOR_WORK_ROUNDS_FIXED = 16;
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
@@ -25,8 +35,11 @@ public:
     int32_t nVersion;
     uint256 hashPrevBlock;
     uint256 hashMerkleRoot;
+    uint256 hashHistoryMMRRoot;
     uint32_t nTime;
     uint32_t nBits;
+    uint16_t nMajorWorkCtxSize;
+    uint8_t nMinorWorkRounds;
     uint32_t nNonce;
 
     CBlockHeader()
@@ -34,15 +47,21 @@ public:
         SetNull();
     }
 
-    SERIALIZE_METHODS(CBlockHeader, obj) { READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce); }
+    SERIALIZE_METHODS(CBlockHeader, obj)
+    {
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.hashHistoryMMRRoot, obj.nTime, obj.nBits, obj.nMajorWorkCtxSize, obj.nMinorWorkRounds, obj.nNonce);
+    }
 
     void SetNull()
     {
         nVersion = 0;
         hashPrevBlock.SetNull();
         hashMerkleRoot.SetNull();
+        hashHistoryMMRRoot.SetNull();
         nTime = 0;
         nBits = 0;
+        nMajorWorkCtxSize = 0;
+        nMinorWorkRounds = 0;
         nNonce = 0;
     }
 
@@ -104,12 +123,15 @@ public:
     CBlockHeader GetBlockHeader() const
     {
         CBlockHeader block;
-        block.nVersion       = nVersion;
-        block.hashPrevBlock  = hashPrevBlock;
-        block.hashMerkleRoot = hashMerkleRoot;
-        block.nTime          = nTime;
-        block.nBits          = nBits;
-        block.nNonce         = nNonce;
+        block.nVersion           = nVersion;
+        block.hashPrevBlock      = hashPrevBlock;
+        block.hashMerkleRoot     = hashMerkleRoot;
+        block.hashHistoryMMRRoot = hashHistoryMMRRoot;
+        block.nTime              = nTime;
+        block.nBits              = nBits;
+        block.nMajorWorkCtxSize  = nMajorWorkCtxSize;
+        block.nMinorWorkRounds   = nMinorWorkRounds;
+        block.nNonce             = nNonce;
         return block;
     }
 

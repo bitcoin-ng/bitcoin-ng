@@ -186,8 +186,11 @@ public:
     //! block header
     int32_t nVersion{0};
     uint256 hashMerkleRoot{};
+    uint256 hashHistoryMMRRoot{};
     uint32_t nTime{0};
     uint32_t nBits{0};
+    uint16_t nMajorWorkCtxSize{0};
+    uint8_t nMinorWorkRounds{0};
     uint32_t nNonce{0};
 
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
@@ -199,8 +202,11 @@ public:
     explicit CBlockIndex(const CBlockHeader& block)
         : nVersion{block.nVersion},
           hashMerkleRoot{block.hashMerkleRoot},
+          hashHistoryMMRRoot{block.hashHistoryMMRRoot},
           nTime{block.nTime},
           nBits{block.nBits},
+          nMajorWorkCtxSize{block.nMajorWorkCtxSize},
+          nMinorWorkRounds{block.nMinorWorkRounds},
           nNonce{block.nNonce}
     {
     }
@@ -234,8 +240,11 @@ public:
         if (pprev)
             block.hashPrevBlock = pprev->GetBlockHash();
         block.hashMerkleRoot = hashMerkleRoot;
+        block.hashHistoryMMRRoot = hashHistoryMMRRoot;
         block.nTime = nTime;
         block.nBits = nBits;
+        block.nMajorWorkCtxSize = nMajorWorkCtxSize;
+        block.nMinorWorkRounds = nMinorWorkRounds;
         block.nNonce = nNonce;
         return block;
     }
@@ -391,8 +400,11 @@ public:
         READWRITE(obj.nVersion);
         READWRITE(obj.hashPrev);
         READWRITE(obj.hashMerkleRoot);
+        READWRITE(obj.hashHistoryMMRRoot);
         READWRITE(obj.nTime);
         READWRITE(obj.nBits);
+        READWRITE(obj.nMajorWorkCtxSize);
+        READWRITE(obj.nMinorWorkRounds);
         READWRITE(obj.nNonce);
     }
 
@@ -402,8 +414,11 @@ public:
         block.nVersion = nVersion;
         block.hashPrevBlock = hashPrev;
         block.hashMerkleRoot = hashMerkleRoot;
+        block.hashHistoryMMRRoot = hashHistoryMMRRoot;
         block.nTime = nTime;
         block.nBits = nBits;
+        block.nMajorWorkCtxSize = nMajorWorkCtxSize;
+        block.nMinorWorkRounds = nMinorWorkRounds;
         block.nNonce = nNonce;
         return block.GetHash();
     }

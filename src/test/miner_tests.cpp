@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +10,7 @@
 #include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <interfaces/mining.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <policy/policy.h>
 #include <test/util/random.h>
@@ -71,6 +73,7 @@ struct MinerTestingSetup : public TestingSetup {
 BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
+static constexpr unsigned int CTAM_MINER_TEST_ENERGY_BITS{0x207fffff}; // ~2 attempts per block; same target as the regtest genesis
 
 constexpr static struct {
     unsigned int extranonce;
@@ -677,6 +680,10 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     CScript scriptPubKey = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
     BlockAssembler::Options options;
     options.coinbase_output_script = scriptPubKey;
+    node::CtamMiningBackend ctam_mining{gArgs};
+    if (ctam_mining.Enabled()) {
+        gArgs.ForceSetArg("-ctamtestdiffbits", strprintf("%u", CTAM_MINER_TEST_ENERGY_BITS));
+    }
 
     // Create and check a simple template
     std::unique_ptr<BlockTemplate> block_template = mining->createNewBlock(options);
@@ -704,12 +711,23 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         {
             // A block template does not have proof-of-work, but it might pass
             // verification by coincidence. Grind the nonce if needed:
-            while (CheckProofOfWork(block.GetHash(), block.nBits, Assert(m_node.chainman)->GetParams().GetConsensus())) {
-                block.nNonce++;
-            }
-
             std::string reason;
             std::string debug;
+            if (ctam_mining.Enabled()) {
+                // CTAM proof-of-work is a server-side digest-vs-target check,
+                // so grind the nonce against checkBlock itself until the
+                // digest misses the target; at the easy test bits an unsolved
+                // header passes by coincidence with probability ~1/2.
+                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
+                while (mining->checkBlock(block, {.check_pow = true}, reason, debug)) {
+                    block.nNonce++;
+                }
+            } else {
+                while (CheckProofOfWork(block.GetHash(), block.nBits, Assert(m_node.chainman)->GetParams().GetConsensus())) {
+                    block.nNonce++;
+                }
+            }
+
             BOOST_REQUIRE(!mining->checkBlock(block, {.check_pow = true}, reason, debug));
             BOOST_REQUIRE_EQUAL(reason, "high-hash");
             BOOST_REQUIRE_EQUAL(debug, "proof of work failed");
@@ -739,8 +757,14 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         CMutableTransaction txCoinbase(*block.vtx[0]);
         {
             LOCK(cs_main);
+            const CBlockIndex* tip = Assert(m_node.chainman)->ActiveChain().Tip();
             block.nVersion = VERSIONBITS_TOP_BITS;
-            block.nTime = Assert(m_node.chainman)->ActiveChain().Tip()->GetMedianTimePast()+1;
+            block.nTime = tip->GetMedianTimePast() + 1;
+            if (ctam_mining.Enabled()) {
+                // Exercise the CTAM mining lifecycle without spending minutes
+                // per bootstrap block at the inherited BNG target.
+                block.nBits = CTAM_MINER_TEST_ENERGY_BITS;
+            }
             txCoinbase.version = 1;
             txCoinbase.vin[0].scriptSig = CScript{} << (current_height + 1) << bi.extranonce;
             txCoinbase.vout.resize(1); // Ignore the (optional) segwit commitment added by CreateNewBlock (as the hardcoded nonces don't account for this)
@@ -755,11 +779,16 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 
         // The block template does not have proof-of-work, so solve it.
         bool solved{false};
-        for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
-            block.nNonce = nonce;
-            if (CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
-                solved = true;
-                break;
+        if (ctam_mining.Enabled()) {
+            uint64_t max_tries{std::numeric_limits<uint32_t>::max()};
+            solved = ctam_mining.SolveHeader(*Assert(m_node.chainman), block, max_tries);
+        } else {
+            for (uint32_t nonce = 0; nonce < std::numeric_limits<uint32_t>::max(); ++nonce) {
+                block.nNonce = nonce;
+                if (CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+                    solved = true;
+                    break;
+                }
             }
         }
         BOOST_REQUIRE(solved);
@@ -767,8 +796,10 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(block);
         // Alternate calls between Chainman's ProcessNewBlock and submitSolution
         // via the Mining interface. The former is used by net_processing as well
-        // as the submitblock RPC.
-        if (current_height % 2 == 0) {
+        // as the submitblock RPC. CTAM mining is server-side, so CTAM-enabled
+        // runs accept the solved block directly after SolveHeader commits the
+        // winning branch; submitSolution remains legacy interface coverage.
+        if (ctam_mining.Enabled() || current_height % 2 == 0) {
             BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlock(shared_pblock, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
         } else {
             BOOST_REQUIRE(block_template->submitSolution(block.nVersion, block.nTime, block.nNonce, MakeTransactionRef(txCoinbase)));

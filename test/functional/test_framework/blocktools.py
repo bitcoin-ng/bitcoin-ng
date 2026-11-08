@@ -98,10 +98,13 @@ def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl
     block.nVersion = version or tmpl.get('version') or VERSIONBITS_LAST_OLD_BLOCK_VERSION
     block.nTime = ntime or tmpl.get('curtime') or int(time.time() + 600)
     block.hashPrevBlock = hashprev or int(tmpl['previousblockhash'], 0x10)
+    block.hashHistoryMMRRoot = int(tmpl.get('historymmrroot', '0'), 0x10)
     if tmpl and tmpl.get('bits') is not None:
         block.nBits = struct.unpack('>I', bytes.fromhex(tmpl['bits']))[0]
     else:
         block.nBits = REGTEST_N_BITS
+    block.nMajorWorkCtxSize = tmpl.get('major_work_ctx_size', block.nMajorWorkCtxSize)
+    block.nMinorWorkRounds = tmpl.get('minor_work_rounds', block.nMinorWorkRounds)
     if coinbase is None:
         coinbase = create_coinbase(height=tmpl['height'])
     block.vtx.append(coinbase)

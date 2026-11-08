@@ -1,3 +1,7 @@
+// Copyright (c) 2026-present The BNG developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <node/caches.h>
 #include <util/byte_units.h>
 

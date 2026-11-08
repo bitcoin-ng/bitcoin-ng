@@ -1,4 +1,5 @@
 // Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +7,7 @@
 
 #include <arith_uint256.h>
 #include <chain.h>
+#include <common/args.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <dbwrapper.h>
@@ -16,6 +18,7 @@
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
 #include <logging.h>
+#include <node/ctam_miner.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -109,6 +112,11 @@ bool BlockTreeDB::ReadFlag(const std::string& name, bool& fValue)
 bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, const util::SignalInterrupt& interrupt)
 {
     AssertLockHeld(::cs_main);
+    // CTAM-backed proof-of-work is state-sensitive and cannot be re-derived
+    // from the header hash alone; those headers were fully validated before
+    // being written to the index, so skip the stateless nBits check on reload
+    // (mirrors CheckBlockHeader in validation.cpp).
+    const bool check_stateless_pow{!node::CtamMiningBackend{gArgs}.Enabled()};
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
     pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
 
@@ -128,13 +136,16 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nUndoPos       = diskindex.nUndoPos;
                 pindexNew->nVersion       = diskindex.nVersion;
                 pindexNew->hashMerkleRoot = diskindex.hashMerkleRoot;
+                pindexNew->hashHistoryMMRRoot = diskindex.hashHistoryMMRRoot;
                 pindexNew->nTime          = diskindex.nTime;
                 pindexNew->nBits          = diskindex.nBits;
                 pindexNew->nNonce         = diskindex.nNonce;
+                pindexNew->nMajorWorkCtxSize = diskindex.nMajorWorkCtxSize;
+                pindexNew->nMinorWorkRounds = diskindex.nMinorWorkRounds;
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams)) {
+                if (check_stateless_pow && !CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams)) {
                     LogError("%s: CheckProofOfWork failed: %s\n", __func__, pindexNew->ToString());
                     return false;
                 }
@@ -1017,8 +1028,11 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 
     const auto block_hash{block.GetHash()};
 
-    // Check the header
-    if (!CheckProofOfWork(block_hash, block.nBits, GetConsensus())) {
+    // Check the BNG header shape. CTAM proof validation is state-sensitive and
+    // is performed by validation when the previous block index is available.
+    if (::GetSerializeSize(block.GetBlockHeader()) != BNG_HEADER_V1_SIZE ||
+        block.nMajorWorkCtxSize < BNG_MAJOR_WORK_CTX_SIZE_DEFAULT ||
+        block.nMinorWorkRounds != BNG_MINOR_WORK_ROUNDS_FIXED) {
         LogError("Errors in block header at %s while reading block", pos.ToString());
         return false;
     }

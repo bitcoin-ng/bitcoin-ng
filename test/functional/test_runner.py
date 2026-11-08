@@ -81,6 +81,7 @@ TEST_FRAMEWORK_UNIT_TESTS = 'feature_framework_unit_tests.py'
 EXTENDED_SCRIPTS = [
     # These tests are not run by default.
     # Longest test should go first, to favor running tests in parallel
+    'ctam_mining_flows.py',
     'feature_pruning.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',
@@ -167,6 +168,7 @@ BASE_SCRIPTS = [
     'rpc_invalid_address_message.py',
     'rpc_validateaddress.py',
     'interface_bitcoin_cli.py',
+    'interface_ctam_rest_mining.py',
     'feature_bind_extra.py',
     'mempool_resurrect.py',
     'wallet_txn_doublespend.py --mineblock',
@@ -447,11 +449,6 @@ def main():
 
     enable_bitcoind = config["components"].getboolean("ENABLE_BITCOIND")
 
-    if not enable_bitcoind:
-        print("No functional tests to run.")
-        print("Re-compile with the -DBUILD_DAEMON=ON build option")
-        sys.exit(1)
-
     # Build list of tests
     test_list = []
     if tests:
@@ -508,6 +505,11 @@ def main():
 
     if args.filter:
         test_list = list(filter(re.compile(args.filter).search, test_list))
+
+    if not enable_bitcoind:
+        print("No functional tests to run.")
+        print("Re-compile with the -DBUILD_DAEMON=ON build option")
+        sys.exit(1)
 
     if not test_list:
         print("No valid test scripts specified. Check that your test is in one "

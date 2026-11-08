@@ -1,0 +1,45 @@
+GIP-0004 implementation changes so far
+
+1. Added a mining-scoped CTAM REST client in BNG.
+   Files:
+   - `src/crypto/ctam_client.h`
+   - `src/crypto/ctam_client.cpp`
+
+2. Added a buffered `csha256` wrapper that calls CTAM over REST.
+   Files:
+   - `src/crypto/ctam_sha256.h`
+   - `src/crypto/ctam_sha256.cpp`
+
+3. Refactored the BNG-facing CTAM hash API to take a three-part difficulty model.
+   - energy difficulty: classic Bitcoin compact target
+   - major CTAM difficulty: the expected CTAM `context_size` exponent
+   - minor CTAM difficulty: consensus-fixed CTA-SHA256 rounds, currently fixed to 16
+   - BNG now treats `context_size = 27` (~16 MiB) as the initial lower bound for the major CTAM difficulty, replacing the older byte-based floor wording.
+
+4. Kept CTAM transport compatibility by mapping the BNG injection-round difficulty onto CTAM's `injection_rounds_difficulty` request field.
+   - BNG also sends energy and context-size difficulty fields in the request payload.
+   - The Rust CTAM server now accepts typed energy/context-size/injection-round request fields.
+   - `POST /crypto/cta_sha256` still resolves hashing behavior through the injection-round difficulty path.
+   - `POST /crypto/mine_csha256` now uses the energy difficulty for nonce-range mining.
+   - The CTAM context-size difficulty is now sent as `context_size_difficulty` and must match CTAM's live `context_size`.
+
+5. Added CTAM-gated unit-test arguments to the test framework.
+   Flags:
+   - `-ctam=1`
+   - `-ctamresturl=...`
+   - `-ctamtimeoutms=...`
+
+6. Added the first C++ smoke test for local CTAM integration.
+   File:
+   - `src/test/bng/ctam_rest_client_tests.cpp`
+
+7. Wired the smoke test into `test_bitcoin` and made its opt-out message count as a skipped test under CMake/CTest.
+
+8. Verified the current implementation builds successfully with:
+   - `cmake --build build_ctam_rest_test --target bitcoind -j4`
+   - `cmake --build build_ctam_rest_test --target test_bitcoin -j4`
+
+9. Confirmed the targeted Boost smoke test runs cleanly against a live local CTAM daemon.
+
+Next implementation step:
+- hook the CTAM-backed `csha256` path into mining code

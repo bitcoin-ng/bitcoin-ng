@@ -11,6 +11,8 @@
 #include <chain.h>
 #include <checkqueue.h>
 #include <clientversion.h>
+#include <common/args.h>
+#include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
@@ -31,6 +33,7 @@
 #include <logging.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
+#include <node/ctam_miner.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
 #include <policy/policy.h>
@@ -49,6 +52,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <undo.h>
+#include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
@@ -87,6 +91,33 @@ using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
+
+namespace {
+
+bool CtamPowValidationEnabled()
+{
+    return node::CtamMiningBackend{gArgs}.Enabled();
+}
+
+std::optional<unsigned int> CtamTestDiffBitsOverride()
+{
+    const int64_t bits{gArgs.GetIntArg("-ctamtestdiffbits", 0)};
+    if (bits <= 0 || bits > std::numeric_limits<unsigned int>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<unsigned int>(bits);
+}
+
+bool CheckCtamProofOfWork(const CBlockHeader& block, const CBlockIndex* pindexPrev)
+{
+    if (pindexPrev == nullptr) {
+        LogWarning("CTAM proof-of-work validation failed: previous block index is missing\n");
+        return false;
+    }
+    return node::CtamMiningBackend{gArgs}.VerifyHeader(block, pindexPrev->nHeight, pindexPrev->GetBlockHash());
+}
+
+} // namespace
 
 /** Size threshold for warning about slow UTXO set flush to disk. */
 static constexpr size_t WARN_FLUSH_COINS_SIZE = 1 << 30; // 1 GiB
@@ -3923,9 +3954,26 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    if (::GetSerializeSize(block) != BNG_HEADER_V1_SIZE) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-header-size", "serialized BNG header size mismatch");
+    }
+    if (block.nMajorWorkCtxSize < BNG_MAJOR_WORK_CTX_SIZE_DEFAULT) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-major-work-ctx-size", "major work context size is below the BNG floor");
+    }
+    if (block.nMinorWorkRounds > BNG_MINOR_WORK_ROUNDS_MAX) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-minor-work-rounds", "minor work rounds exceed the SHA-256 round limit");
+    }
+    if (block.nMinorWorkRounds != BNG_MINOR_WORK_ROUNDS_FIXED) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-minor-work-rounds", "minor work rounds do not match BNG consensus");
+    }
+
+    // CTAM-backed proof-of-work is state-sensitive and must be checked once the
+    // previous block index is known in ContextualCheckBlockHeader().
+    if (fCheckPOW && !CtamPowValidationEnabled()) {
+        if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+        }
+    }
 
     return true;
 }
@@ -4177,7 +4225,7 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
  *  v0.12 and v0.15 (when no additional protection was in place) whereby an attacker could unboundedly
  *  grow our in-memory block index. See https://bitcoincore.org/en/2024/07/03/disclose-header-spam.
  */
-static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, bool fCheckPOW = true) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
     assert(pindexPrev != nullptr);
@@ -4185,8 +4233,15 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
 
     // Check proof of work
     const Consensus::Params& consensusParams = chainman.GetConsensus();
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
+    const unsigned int expected_bits{GetNextWorkRequired(pindexPrev, &block, consensusParams)};
+    const std::optional<unsigned int> ctam_test_bits{CtamPowValidationEnabled() ? CtamTestDiffBitsOverride() : std::nullopt};
+    if (block.nBits != expected_bits && (!ctam_test_bits || block.nBits != *ctam_test_bits)) {
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+    }
+
+    if (fCheckPOW && CtamPowValidationEnabled() && !CheckCtamProofOfWork(block, pindexPrev)) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
+    }
 
     // Check timestamp against prev
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
@@ -4601,7 +4656,7 @@ BlockValidationState TestBlockValidity(
      * - do run ContextualCheckBlock()
      */
 
-    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainman, tip)) {
+    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainman, tip, check_pow)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         return state;
     }

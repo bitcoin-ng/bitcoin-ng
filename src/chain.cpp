@@ -14,8 +14,8 @@ std::string CBlockFileInfo::ToString() const
 
 std::string CBlockIndex::ToString() const
 {
-    return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, hashBlock=%s)",
-                     pprev, nHeight, hashMerkleRoot.ToString(), GetBlockHash().ToString());
+    return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, history_mmr=%s, major_work_ctx=%u, minor_work_rounds=%u, hashBlock=%s)",
+                     pprev, nHeight, hashMerkleRoot.ToString(), hashHistoryMMRRoot.ToString(), nMajorWorkCtxSize, nMinorWorkRounds, GetBlockHash().ToString());
 }
 
 void CChain::SetTip(CBlockIndex& block)

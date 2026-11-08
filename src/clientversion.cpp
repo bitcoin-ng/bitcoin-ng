@@ -78,6 +78,14 @@ std::string CopyrightHolders(const std::string& strPrefix)
     if (copyright_devs.find("Bitcoin Core") == std::string::npos) {
         strCopyrightHolders += "\n" + strPrefix + "The Bitcoin Core developers";
     }
+
+    // BNG-specific copyright, in addition to the upstream Bitcoin Core attribution.
+    // Reuse the same copyright label ("Copyright (C) " / "©") as strPrefix, but with
+    // the BNG year range rather than the upstream lineage baked into strPrefix.
+    const std::string label{strPrefix.substr(0, strPrefix.find_first_of("0123456789"))};
+    const std::string bng_years{2025 == COPYRIGHT_YEAR ? strprintf("%i", COPYRIGHT_YEAR)
+                                                       : strprintf("%i-%i", 2025, COPYRIGHT_YEAR)};
+    strCopyrightHolders += "\n" + label + bng_years + " The BNG developers";
     return strCopyrightHolders;
 }
 

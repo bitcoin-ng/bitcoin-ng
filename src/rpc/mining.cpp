@@ -1,5 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-present The Bitcoin Core developers
+// Copyright (c) 2026-present The BNG developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +9,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <chainparamsbase.h>
+#include <common/args.h>
 #include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -21,6 +23,7 @@
 #include <key_io.h>
 #include <net.h>
 #include <node/context.h>
+#include <node/ctam_miner.h>
 #include <node/miner.h>
 #include <node/warnings.h>
 #include <policy/ephemeral_policy.h>
@@ -43,13 +46,16 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 using interfaces::BlockRef;
 using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
+using node::CtamMiningBackend;
 using node::GetMinimumTime;
 using node::NodeContext;
 using node::RegenerateCommitments;
@@ -134,11 +140,8 @@ static RPCHelpMan getnetworkhashps()
     };
 }
 
-static bool GenerateBlock(ChainstateManager& chainman, CBlock&& block, uint64_t& max_tries, std::shared_ptr<const CBlock>& block_out, bool process_new_block)
+static bool GenerateLegacySha256dBlock(ChainstateManager& chainman, CBlock& block, uint64_t& max_tries)
 {
-    block_out.reset();
-    block.hashMerkleRoot = BlockMerkleRoot(block);
-
     while (max_tries > 0 && block.nNonce < std::numeric_limits<uint32_t>::max() && !CheckProofOfWork(block.GetHash(), block.nBits, chainman.GetConsensus()) && !chainman.m_interrupt) {
         ++block.nNonce;
         --max_tries;
@@ -148,6 +151,29 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock&& block, uint64_t&
     }
     if (block.nNonce == std::numeric_limits<uint32_t>::max()) {
         return true;
+    }
+
+    return true;
+}
+
+static bool GenerateCtamBlock(ChainstateManager& chainman, const ArgsManager& args, CBlock& block, uint64_t& max_tries)
+{
+    try {
+        CtamMiningBackend backend{args};
+        return backend.SolveHeader(chainman, block, max_tries);
+    } catch (const std::exception& e) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, e.what());
+    }
+}
+
+static bool GenerateBlock(ChainstateManager& chainman, const ArgsManager& args, CBlock&& block, uint64_t& max_tries, std::shared_ptr<const CBlock>& block_out, bool process_new_block)
+{
+    block_out.reset();
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    const bool solved = CtamMiningBackend{args}.Enabled() ? GenerateCtamBlock(chainman, args, block, max_tries) : GenerateLegacySha256dBlock(chainman, block, max_tries);
+    if (!solved) {
+        return false;
     }
 
     block_out = std::make_shared<const CBlock>(std::move(block));
@@ -161,7 +187,7 @@ static bool GenerateBlock(ChainstateManager& chainman, CBlock&& block, uint64_t&
     return true;
 }
 
-static UniValue generateBlocks(ChainstateManager& chainman, Mining& miner, const CScript& coinbase_output_script, int nGenerate, uint64_t nMaxTries)
+static UniValue generateBlocks(ChainstateManager& chainman, Mining& miner, const ArgsManager& args, const CScript& coinbase_output_script, int nGenerate, uint64_t nMaxTries)
 {
     UniValue blockHashes(UniValue::VARR);
     while (nGenerate > 0 && !chainman.m_interrupt) {
@@ -169,7 +195,7 @@ static UniValue generateBlocks(ChainstateManager& chainman, Mining& miner, const
         CHECK_NONFATAL(block_template);
 
         std::shared_ptr<const CBlock> block_out;
-        if (!GenerateBlock(chainman, block_template->getBlock(), nMaxTries, block_out, /*process_new_block=*/true)) {
+        if (!GenerateBlock(chainman, args, block_template->getBlock(), nMaxTries, block_out, /*process_new_block=*/true)) {
             break;
         }
 
@@ -249,7 +275,7 @@ static RPCHelpMan generatetodescriptor()
     Mining& miner = EnsureMining(node);
     ChainstateManager& chainman = EnsureChainman(node);
 
-    return generateBlocks(chainman, miner, coinbase_output_script, num_blocks, max_tries);
+    return generateBlocks(chainman, miner, *node.args, coinbase_output_script, num_blocks, max_tries);
 },
     };
 }
@@ -297,7 +323,7 @@ static RPCHelpMan generatetoaddress()
 
     CScript coinbase_output_script = GetScriptForDestination(destination);
 
-    return generateBlocks(chainman, miner, coinbase_output_script, num_blocks, max_tries);
+    return generateBlocks(chainman, miner, *node.args, coinbase_output_script, num_blocks, max_tries);
 },
     };
 }
@@ -396,7 +422,7 @@ static RPCHelpMan generateblock()
     std::shared_ptr<const CBlock> block_out;
     uint64_t max_tries{DEFAULT_MAX_TRIES};
 
-    if (!GenerateBlock(chainman, std::move(block), max_tries, block_out, process_new_block) || !block_out) {
+    if (!GenerateBlock(chainman, *node.args, std::move(block), max_tries, block_out, process_new_block) || !block_out) {
         throw JSONRPCError(RPC_MISC_ERROR, "Failed to make block.");
     }
 
@@ -986,6 +1012,7 @@ static RPCHelpMan getblocktemplate()
     result.pushKV("vbrequired", int(0));
 
     result.pushKV("previousblockhash", block.hashPrevBlock.GetHex());
+    result.pushKV("historymmrroot", block.hashHistoryMMRRoot.GetHex());
     result.pushKV("transactions", std::move(transactions));
     result.pushKV("coinbaseaux", std::move(aux));
     result.pushKV("coinbasevalue", (int64_t)block.vtx[0]->vout[0].nValue);
@@ -1009,6 +1036,10 @@ static RPCHelpMan getblocktemplate()
     }
     result.pushKV("curtime", block.GetBlockTime());
     result.pushKV("bits", strprintf("%08x", block.nBits));
+    result.pushKV("major_work_ctx_size", block.nMajorWorkCtxSize);
+    result.pushKV("minor_work_rounds", block.nMinorWorkRounds);
+    result.pushKV("header_size", BNG_HEADER_V1_SIZE);
+    result.pushKV("nonce_offset", BNG_HEADER_V1_NONCE_OFFSET);
     result.pushKV("height", (int64_t)(pindexPrev->nHeight+1));
 
     if (consensusParams.signet_blocks) {
